@@ -8,6 +8,7 @@ QR 촬영 → 인적사항 입력(성명·대학·학과·전공·신분·휴대
 | `participants` | 인적사항 + 동의 시각. 휴대폰 번호 기준 1인 1행, 재방문 시 최신 정보로 갱신 |
 | `downloads` | '링크 받기' 1회 = 1행 (참여자·앱·일시) — 앱 건별 기록 |
 | `apps` | 앱 목록(`config.js`와 자동 동기화) + 앱별 누적 다운로드 건수 `download_count` |
+| `settings` | 운영 설정 — `start_at`(앱 선택 시작 시각) |
 
 이전 버전의 `download_history` 테이블이 있으면 서버 시작 시 새 구조로 1회 이전하고, 원본은 `download_history_legacy`로 이름만 바꿔 보관합니다.
 동의하지 않으면 앱 선택 단계로 넘어갈 수 없고, 서버도 동의 없는 요청을 거부합니다.
@@ -45,6 +46,15 @@ npm start
 |---|---|
 | `POST /api/history` | `{name, univ, dept, major, role, phone, appId, agree: true}` → 참여자 저장/갱신 + 다운로드 1건 + 앱 건수 +1. 일시는 DB 서버 시각. IP당 분당 30건 제한 |
 | `GET /api/history` | 헤더 `x-admin-key: <ADMIN_KEY>` 필요. `rows`(최신순 다운로드 + 인적사항), `apps`(앱별 누적 건수), `participants`(참여자 수) |
+| `PUT /api/history/:id` | 관리자. 인적사항(해당 참여자의 모든 기록에 반영)과 이 기록의 앱 수정. 앱 변경 시 앱별 건수 재계산. 다른 참여자의 휴대폰 번호면 409 |
+| `DELETE /api/history/:id` | 관리자. 다운로드 1건 삭제 + 앱별 건수 재계산. 참여자의 마지막 기록이면 인적사항도 삭제 |
+
+| `GET /api/settings` | 공개. `startAt`(앱 선택 시작 시각, 없으면 `null`)과 서버 현재 시각 `now` |
+| `PUT /api/settings` | 관리자. `{startAt: ISO 시각 | null}` — `null`이면 제한 해제(즉시 시작) |
+
+**앱 선택 시작 시각**: 대시보드 SCHEDULE 카드에서 설정합니다. 시작 전에는 참가자가 인적사항은 입력할 수 있지만 앱 선택이 잠기고 카운트다운이 표시되며, 시작 시각에 자동으로 열립니다. 기기 시계가 틀려도 서버 시각 기준으로 계산하고, 시작 전 기록 요청은 서버가 거부(403)합니다.
+
+대시보드 HISTORY 표의 **수정 / 삭제** 버튼이 위 API를 사용합니다 (삭제는 확인 후 실행, 되돌릴 수 없음).
 
 ## GitHub Pages에 페이지를 두고 API만 따로 띄우는 경우
 

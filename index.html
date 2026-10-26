@@ -47,6 +47,19 @@
     <div class="err-msg" id="loadMsg"></div>
   </div>
 
+  <!-- 앱 선택 시작 시각 -->
+  <div class="card">
+    <div class="sec-head">⏱ SCHEDULE <small>—— QR 촬영 후 앱 선택 시작 시각</small></div>
+    <div class="sched-status" id="schedStatus">불러오는 중…</div>
+    <div class="toolbar" style="margin-top:12px">
+      <input id="schedAt" type="datetime-local" step="60" aria-label="앱 선택 시작 시각">
+      <button class="pill dark sm" id="schedSave">시작 시각 저장</button>
+      <button class="pill sm" id="schedNow">즉시 시작 (해제)</button>
+    </div>
+    <p class="note">시작 전에도 참가자는 인적사항을 입력할 수 있고, 앱 선택은 잠긴 채 카운트다운이 표시됩니다. 시작 시각이 되면 자동으로 열립니다. 저장하려면 관리자 키가 필요합니다.</p>
+    <div class="err-msg" id="schedMsg"></div>
+  </div>
+
   <!-- KPI -->
   <div class="section">
     <div class="sec-head">📊 OVERVIEW <small>—— 필터 적용 결과</small></div>
@@ -140,12 +153,36 @@
       <table>
         <thead><tr>
           <th>#</th><th>일시</th><th>성명</th><th>대학</th><th>학과</th><th>전공</th>
-          <th>신분</th><th>휴대폰</th><th>다운로드 앱</th>
+          <th>신분</th><th>휴대폰</th><th>다운로드 앱</th><th class="act">관리</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
     </div>
+    <div class="toast" id="histToast"></div>
   </div>
+
+  <!-- 기록 수정 -->
+  <dialog id="editDlg" class="dlg">
+    <form id="editForm" method="dialog" novalidate>
+      <div class="sec-head">✏️ EDIT <small>—— 다운로드 기록 수정</small><span class="r" id="editMeta"></span></div>
+      <div class="grid2">
+        <div><label for="eName">성명</label><input id="eName" maxlength="30"></div>
+        <div><label for="eUniv">대학</label><input id="eUniv" maxlength="50"></div>
+        <div><label for="eDept">학과</label><input id="eDept" maxlength="50"></div>
+        <div><label for="eMajor">전공</label><input id="eMajor" maxlength="50"></div>
+        <div><label for="eRole">신분</label><select id="eRole"></select></div>
+        <div><label for="ePhone">휴대폰</label><input id="ePhone" type="tel" inputmode="numeric" maxlength="13"></div>
+      </div>
+      <label for="eApp">다운로드 앱</label>
+      <select id="eApp"></select>
+      <p class="note" id="editNote"></p>
+      <div class="err-msg" id="editErr"></div>
+      <div class="row">
+        <button class="pill" type="button" id="editCancel">취소</button>
+        <button class="pill dark" type="submit" id="editSave">저장</button>
+      </div>
+    </form>
+  </dialog>
 </div>
 
 <footer class="foot">
@@ -298,8 +335,9 @@ function render() {
 
   $("rowCount").textContent = `${total}건`;
   $("tbody").innerHTML = list.map((r, i) =>
-    `<tr><td>${total - i}</td>${COLS.map(c => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")
-    || `<tr><td colspan="9" style="text-align:center;color:var(--mute)">기록 없음</td></tr>`;
+    `<tr><td>${total - i}</td>${COLS.map(c => `<td>${esc(r[c])}</td>`).join("")}
+      <td class="act"><button class="mini" data-edit="${r.id}">수정</button><button class="mini danger" data-del="${r.id}">삭제</button></td></tr>`).join("")
+    || `<tr><td colspan="10" style="text-align:center;color:var(--mute)">기록 없음</td></tr>`;
 }
 
 // ---------- 데이터 ----------
@@ -330,6 +368,130 @@ $("loadBtn").addEventListener("click", load);
 let resizeT;
 window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(render, 150); });
 ["q", "fApp", "fRole", "fPeriod"].forEach(id => $(id).addEventListener(id === "q" ? "input" : "change", render));
+
+// ---------- 앱 선택 시작 시각 ----------
+let sched = { startAt: null, offset: 0 };
+const fmtKST = d => d.toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit" });
+const toLocalInput = d => `${ymd(d)}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+function remainText(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return d ? `${d}일 ${h}시간 ${m}분` : h ? `${h}시간 ${m}분` : `${m}분 ${s % 60}초`;
+}
+function renderSched() {
+  const el = $("schedStatus");
+  if (!sched.startAt) { el.className = "sched-status on"; el.innerHTML = "<b>진행 중</b> · 시작 시각 제한 없음 (QR 촬영 즉시 앱 선택 가능)"; return; }
+  const left = sched.startAt - (Date.now() + sched.offset);
+  el.className = "sched-status " + (left > 0 ? "wait" : "on");
+  el.innerHTML = left > 0
+    ? `<b>시작 전</b> · ${esc(fmtKST(sched.startAt))} 시작 · <span class="disp">${remainText(left)}</span> 남음`
+    : `<b>진행 중</b> · ${esc(fmtKST(sched.startAt))}부터 앱 선택 가능`;
+}
+function applySched(data) {
+  sched = { startAt: data.startAt ? new Date(data.startAt) : null, offset: new Date(data.now) - Date.now() };
+  if (sched.startAt) $("schedAt").value = toLocalInput(sched.startAt);
+  renderSched();
+}
+async function loadSched() {
+  try {
+    const res = await fetch(SETTINGS_URL);
+    applySched(await res.json());
+  } catch (e) { $("schedStatus").textContent = "시작 시각을 불러오지 못했습니다 (서버 연결 확인)."; }
+}
+async function saveSched(startAt) {
+  $("schedMsg").textContent = "";
+  if (!$("adminKey").value.trim()) { $("schedMsg").textContent = "관리자 키를 먼저 입력하세요."; return; }
+  try {
+    const res = await fetch(SETTINGS_URL, {
+      method: "PUT", headers: { "Content-Type": "application/json", "x-admin-key": $("adminKey").value.trim() },
+      body: JSON.stringify({ startAt })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    applySched(data);
+    if (!startAt) $("schedAt").value = "";
+    $("schedMsg").style.color = "rgb(var(--ok))";
+    $("schedMsg").textContent = startAt ? "시작 시각을 저장했습니다." : "시작 시각 제한을 해제했습니다.";
+  } catch (err) {
+    $("schedMsg").style.color = "";
+    $("schedMsg").textContent = "저장 실패: " + err.message;
+  }
+}
+$("schedSave").addEventListener("click", () => {
+  if (!$("schedAt").value) { $("schedMsg").style.color = ""; $("schedMsg").textContent = "시작 시각을 선택하세요."; return; }
+  saveSched(new Date($("schedAt").value).toISOString());
+});
+$("schedNow").addEventListener("click", () => saveSched(null));
+setInterval(renderSched, 1000);
+loadSched();
+
+// ---------- 기록 수정 · 삭제 ----------
+const api = (path, opts = {}) => fetch(API_URL + path, {
+  ...opts, headers: { "Content-Type": "application/json", "x-admin-key": $("adminKey").value.trim(), ...(opts.headers || {}) }
+}).then(async res => {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+});
+const histToast = msg => { $("histToast").textContent = msg; setTimeout(() => { if ($("histToast").textContent === msg) $("histToast").textContent = ""; }, 4000); };
+const EDIT = { eName: "name", eUniv: "univ", eDept: "dept", eMajor: "major", eRole: "role", ePhone: "phone" };
+ROLES.forEach(r => $("eRole").insertAdjacentHTML("beforeend", `<option>${r}</option>`));
+APPS.forEach(a => $("eApp").insertAdjacentHTML("beforeend", `<option value="${a.id}">${esc(appLabel(a))}</option>`));
+$("ePhone").addEventListener("input", e => {
+  const d = e.target.value.replace(/\D/g, "").slice(0, 11);
+  e.target.value = d.length < 4 ? d : d.length < 8 ? `${d.slice(0, 3)}-${d.slice(3)}` : `${d.slice(0, 3)}-${d.slice(3, d.length - 4)}-${d.slice(-4)}`;
+});
+let editing = null;
+
+$("tbody").addEventListener("click", async e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  const r = rows.find(x => String(x.id) === (b.dataset.edit || b.dataset.del));
+  if (!r) return;
+
+  if (b.dataset.edit) {
+    editing = r;
+    Object.entries(EDIT).forEach(([id, k]) => $(id).value = r[k]);
+    $("eApp").value = r.appId;
+    $("editMeta").textContent = r.time;
+    $("editNote").textContent = r.personCount > 1
+      ? `인적사항 수정은 이 참여자의 기록 ${r.personCount}건 모두에 반영됩니다. 앱 변경은 이 기록에만 적용됩니다.`
+      : "앱 변경 시 앱별 누적 건수도 함께 조정됩니다.";
+    $("editErr").textContent = "";
+    $("editDlg").showModal();
+    return;
+  }
+
+  const msg = `${r.time} · ${r.name} · ${r.app}\n\n이 다운로드 기록을 삭제할까요? 되돌릴 수 없습니다.` +
+    (r.personCount === 1 ? "\n(이 참여자의 마지막 기록이라 인적사항도 함께 삭제됩니다.)" : "");
+  if (!confirm(msg)) return;
+  try {
+    const out = await api(`/${r.id}`, { method: "DELETE" });
+    await load();
+    histToast(out.participantRemoved ? "기록과 참여자 인적사항을 삭제했습니다." : "기록을 삭제했습니다.");
+  } catch (err) {
+    histToast("삭제 실패: " + err.message);
+  }
+});
+
+$("editCancel").addEventListener("click", () => $("editDlg").close());
+$("editForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const body = Object.fromEntries(Object.entries(EDIT).map(([id, k]) => [k, $(id).value.trim()]));
+  body.appId = Number($("eApp").value);
+  if (Object.values(body).some(v => v === "")) { $("editErr").textContent = "모든 항목을 입력하세요."; return; }
+  if (!/^01[016789]-\d{3,4}-\d{4}$/.test(body.phone)) { $("editErr").textContent = "휴대폰 번호 형식을 확인하세요."; return; }
+  $("editSave").disabled = true;
+  try {
+    await api(`/${editing.id}`, { method: "PUT", body: JSON.stringify(body) });
+    $("editDlg").close();
+    await load();
+    histToast("기록을 수정했습니다.");
+  } catch (err) {
+    $("editErr").textContent = "저장 실패: " + err.message;
+  } finally {
+    $("editSave").disabled = false;
+  }
+});
 
 $("csvBtn").addEventListener("click", () => {
   const list = filtered();

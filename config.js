@@ -3,6 +3,8 @@
 // 같은 서버에서 페이지를 열면 그대로 두고,
 // GitHub Pages 등 다른 곳에서 열면 서버 전체 주소로 변경: "https://내서버/api/history"
 window.API_URL = "/api/history";
+// 운영 설정(앱 선택 시작 시각) API — API_URL과 같은 서버
+window.SETTINGS_URL = window.API_URL.replace(/history\/?$/, "settings");
 
 window.APP_VERSION = "v1.3.0";
 window.APP_TITLE ="교수자를 위한 바이브 코딩 교육 웹앱 10선";

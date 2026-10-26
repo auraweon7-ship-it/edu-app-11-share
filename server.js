@@ -76,11 +76,13 @@ async function addHistory(req, res) {
   if (FIELDS.some(f => !v[f])) return send(res, 400, { ok: false, error: "필수 항목 누락" });
   if (!PHONE_RE.test(v.phone)) return send(res, 400, { ok: false, error: "휴대폰 형식 오류" });
   if (!APPS.has(appId)) return send(res, 400, { ok: false, error: "알 수 없는 앱" });
+  const startAt = await getStartAt();
+  if (startAt && startAt > new Date()) {
+    return send(res, 403, { ok: false, error: "아직 앱 선택 시작 전입니다.", startAt: startAt.toISOString() });
+  }
 
   // '링크 받기' 1회: 인적사항 저장(갱신) → 다운로드 1건 → 앱별 건수 +1 을 한 트랜잭션으로
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
+  const saved = await tx(async client => {
     const { rows: [p] } = await client.query(
       `INSERT INTO participants (name, univ, dept, major, role, phone, agreed_at)
        VALUES ($1, $2, $3, $4, $5, $6, now())
@@ -94,8 +96,47 @@ async function addHistory(req, res) {
       [p.id, appId, APPS.get(appId)]);
     const { rows: [app] } = await client.query(
       `UPDATE apps SET download_count = download_count + 1 WHERE id = $1 RETURNING download_count`, [appId]);
+    return { downloadId: Number(dl.id), appCount: app.download_count };
+  });
+  send(res, 201, { ok: true, ...saved });
+}
+
+// ---------- 앱 선택 시작 시각 ----------
+async function getStartAt() {
+  const { rows: [r] } = await pool.query(`SELECT value FROM settings WHERE key = 'start_at'`);
+  return r?.value ? new Date(r.value) : null;
+}
+
+// 공개: 시작 시각 + 서버 현재 시각 (기기 시계 오차 보정용)
+async function getSettings(req, res) {
+  const startAt = await getStartAt();
+  send(res, 200, { ok: true, startAt: startAt?.toISOString() ?? null, now: new Date().toISOString() });
+}
+
+// 관리자: { startAt: ISO 문자열 | null(해제 = 즉시 시작) }
+async function putSettings(req, res) {
+  if (!isAdmin(req, res)) return;
+  let d;
+  try { d = JSON.parse(await readBody(req)); } catch { return send(res, 400, { ok: false, error: "잘못된 요청" }); }
+  let value = null;
+  if (d.startAt != null) {
+    const t = new Date(d.startAt);
+    if (Number.isNaN(t.getTime())) return send(res, 400, { ok: false, error: "시작 시각 형식 오류" });
+    value = t.toISOString();
+  }
+  await pool.query(
+    `INSERT INTO settings (key, value) VALUES ('start_at', $1)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`, [value]);
+  send(res, 200, { ok: true, startAt: value, now: new Date().toISOString() });
+}
+
+async function tx(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const out = await fn(client);
     await client.query("COMMIT");
-    send(res, 201, { ok: true, downloadId: Number(dl.id), appCount: app.download_count });
+    return out;
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -104,15 +145,76 @@ async function addHistory(req, res) {
   }
 }
 
-async function listHistory(req, res) {
-  if (!ADMIN_KEY || !safeEqual(req.headers["x-admin-key"] || "", ADMIN_KEY)) {
-    return send(res, 401, { ok: false, error: "관리자 키가 올바르지 않습니다." });
+function isAdmin(req, res) {
+  if (ADMIN_KEY && safeEqual(req.headers["x-admin-key"] || "", ADMIN_KEY)) return true;
+  send(res, 401, { ok: false, error: "관리자 키가 올바르지 않습니다." });
+  return false;
+}
+
+const recount = (client, ids) => client.query(
+  `UPDATE apps a SET download_count = (SELECT count(*) FROM downloads d WHERE d.app_id = a.id)
+    WHERE a.id = ANY($1::smallint[])`, [ids]);
+
+// 관리자 수정: 인적사항(해당 참여자의 모든 기록에 반영) + 이 기록의 앱
+async function updateHistory(req, res, id) {
+  if (!isAdmin(req, res)) return;
+  let d;
+  try { d = JSON.parse(await readBody(req)); } catch { return send(res, 400, { ok: false, error: "잘못된 요청" }); }
+  const v = Object.fromEntries(FIELDS.map(f => [f, String(d[f] ?? "").trim().slice(0, 100)]));
+  const appId = Number(d.appId);
+  if (FIELDS.some(f => !v[f])) return send(res, 400, { ok: false, error: "필수 항목 누락" });
+  if (!PHONE_RE.test(v.phone)) return send(res, 400, { ok: false, error: "휴대폰 형식 오류" });
+  if (!APPS.has(appId)) return send(res, 400, { ok: false, error: "알 수 없는 앱" });
+
+  try {
+    const found = await tx(async client => {
+      const { rows: [dl] } = await client.query(
+        `SELECT participant_id, app_id FROM downloads WHERE id = $1 FOR UPDATE`, [id]);
+      if (!dl) return false;
+      await client.query(
+        `UPDATE participants SET name = $1, univ = $2, dept = $3, major = $4, role = $5, phone = $6, updated_at = now()
+          WHERE id = $7`,
+        [v.name, v.univ, v.dept, v.major, v.role, v.phone, dl.participant_id]);
+      if (dl.app_id !== appId) {
+        await client.query(`UPDATE downloads SET app_id = $1, app_name = $2 WHERE id = $3`, [appId, APPS.get(appId), id]);
+        await recount(client, [dl.app_id, appId]);
+      }
+      return true;
+    });
+    if (!found) return send(res, 404, { ok: false, error: "기록을 찾을 수 없습니다." });
+    send(res, 200, { ok: true });
+  } catch (err) {
+    if (err.code === "23505") return send(res, 409, { ok: false, error: "이미 다른 참여자가 사용 중인 휴대폰 번호입니다." });
+    throw err;
   }
+}
+
+// 관리자 삭제: 다운로드 1건 삭제, 남은 기록이 없는 참여자는 인적사항도 삭제
+async function deleteHistory(req, res, id) {
+  if (!isAdmin(req, res)) return;
+  const result = await tx(async client => {
+    const { rows: [dl] } = await client.query(
+      `DELETE FROM downloads WHERE id = $1 RETURNING participant_id, app_id`, [id]);
+    if (!dl) return null;
+    const { rowCount } = await client.query(
+      `DELETE FROM participants p WHERE p.id = $1
+         AND NOT EXISTS (SELECT 1 FROM downloads d WHERE d.participant_id = p.id)`, [dl.participant_id]);
+    await recount(client, [dl.app_id]);
+    return { participantRemoved: rowCount > 0 };
+  });
+  if (!result) return send(res, 404, { ok: false, error: "기록을 찾을 수 없습니다." });
+  send(res, 200, { ok: true, ...result });
+}
+
+async function listHistory(req, res) {
+  if (!isAdmin(req, res)) return;
   const { rows } = await pool.query(
-    `SELECT to_char(d.created_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS') AS time,
+    `SELECT d.id::int AS id, d.app_id AS "appId",
+            count(*) OVER (PARTITION BY p.id)::int AS "personCount",
+            to_char(d.created_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS') AS time,
             p.name, p.univ, p.dept, p.major, p.role, p.phone, d.app_id || '. ' || d.app_name AS app
        FROM downloads d JOIN participants p ON p.id = d.participant_id
-      ORDER BY d.created_at DESC`);
+      ORDER BY d.created_at DESC, d.id DESC`);
   const { rows: apps } = await pool.query(
     `SELECT id, name, download_count AS count FROM apps ORDER BY id`);
   const { rows: [{ count: participants }] } = await pool.query(`SELECT count(*)::int AS count FROM participants`);
@@ -124,7 +226,7 @@ const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin;
   const cors = origin && origins.includes(origin)
     ? { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Headers": "Content-Type, x-admin-key",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS", Vary: "Origin" }
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS", Vary: "Origin" }
     : {};
   for (const [k, v] of Object.entries(cors)) res.setHeader(k, v);
 
@@ -133,6 +235,19 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
       if (req.method === "POST") return await addHistory(req, res);
       if (req.method === "GET") return await listHistory(req, res);
+      return send(res, 405, { ok: false, error: "method not allowed" });
+    }
+    if (url.pathname === "/api/settings") {
+      if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
+      if (req.method === "GET") return await getSettings(req, res);
+      if (req.method === "PUT") return await putSettings(req, res);
+      return send(res, 405, { ok: false, error: "method not allowed" });
+    }
+    const m = url.pathname.match(/^\/api\/history\/(\d{1,15})$/);
+    if (m) {
+      if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
+      if (req.method === "PUT") return await updateHistory(req, res, m[1]);
+      if (req.method === "DELETE") return await deleteHistory(req, res, m[1]);
       return send(res, 405, { ok: false, error: "method not allowed" });
     }
     const file = STATIC[url.pathname];

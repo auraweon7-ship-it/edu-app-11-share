@@ -26,6 +26,7 @@
   <div class="sec-head">📦 What is “웹앱 받기”?</div>
   <p class="hero-title disp">VIBE<br><span>×</span><br>EDU APPS</p>
   <p class="hero-sub"><b id="title"></b><br>인적사항을 입력하고 <b>웹앱 1개</b>를 고르면 바로 링크를 드립니다. 1회 1개씩 받을 수 있어요.</p>
+  <p class="notice hidden" id="startNotice"></p>
 
   <div class="steps">
     <span id="s1" class="on">1. 인적사항</span>
@@ -88,6 +89,11 @@
   <!-- STEP 2 -->
   <form id="appForm" class="card hidden">
     <div class="sec-head">🧩 SELECT APP <small>—— 1회 1개만 선택</small></div>
+    <div class="lock-banner hidden" id="lockBanner" role="status" aria-live="polite">
+      <div class="t">⏱ 앱 선택은 아직 시작 전입니다</div>
+      <div class="cd disp" id="lockCd"></div>
+      <div class="s" id="lockAt"></div>
+    </div>
     <div class="apps" id="apps"></div>
     <div class="err-msg" id="appErr"></div>
     <div class="row">
@@ -161,7 +167,35 @@ function step(n) {
   $("result").classList.toggle("hidden", n !== 3);
   [1, 2, 3].forEach(i => $("s" + i).classList.toggle("on", i === n));
   window.scrollTo(0, 0);
+  if (n === 2) loadSched();
 }
+
+// ---------- 앱 선택 시작 시각: 시작 전에는 앱 선택 잠금 + 카운트다운 ----------
+let sched = { startAt: null, offset: 0 }, busy = false;
+const isLocked = () => !!sched.startAt && sched.startAt - (Date.now() + sched.offset) > 0;
+async function loadSched() {
+  try {
+    const d = await fetch(SETTINGS_URL).then(r => r.json());
+    if (d.ok) sched = { startAt: d.startAt ? new Date(d.startAt) : null, offset: new Date(d.now) - Date.now() };
+  } catch (e) { /* 설정을 못 읽으면 서버가 최종 판단 */ }
+  renderLock();
+}
+function renderLock() {
+  const locked = isLocked();
+  $("lockBanner").classList.toggle("hidden", !locked);
+  $("apps").classList.toggle("locked", locked);
+  $("startNotice").classList.toggle("hidden", !locked);
+  $("getBtn").disabled = locked || busy;
+  if (!locked) return;
+  const s = Math.floor((sched.startAt - (Date.now() + sched.offset)) / 1000), p = n => String(n).padStart(2, "0");
+  const d = Math.floor(s / 86400), hms = `${p(Math.floor(s % 86400 / 3600))}:${p(Math.floor(s % 3600 / 60))}:${p(s % 60)}`;
+  const at = sched.startAt.toLocaleString("ko-KR", { month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" });
+  $("lockCd").textContent = d ? `${d}일 ${hms}` : hms;
+  $("lockAt").textContent = `${at}에 자동으로 열립니다`;
+  $("startNotice").textContent = `⏱ 웹앱 선택은 ${at}부터 가능합니다. 인적사항은 미리 입력해 두세요.`;
+}
+setInterval(renderLock, 1000);
+loadSched();
 
 $("infoForm").addEventListener("submit", e => {
   e.preventDefault();
@@ -197,21 +231,25 @@ async function record(row) {
 
 $("appForm").addEventListener("submit", async e => {
   e.preventDefault();
+  if (isLocked()) { $("appErr").textContent = "아직 앱 선택 시작 전입니다."; return; }
   const sel = document.querySelector('input[name="app"]:checked');
   if (!sel) { $("appErr").textContent = "웹앱 1개를 선택하세요."; return; }
   $("appErr").textContent = "";
   const app = APPS.find(a => a.id === Number(sel.value));
 
+  busy = true;
   $("getBtn").disabled = true;
   $("getBtn").textContent = "처리 중…";
   try {
     await record({ ...info, appId: app.id, agree: $("agree").checked });
   } catch (err) {
     $("appErr").textContent = `기록 저장에 실패했습니다. 잠시 후 다시 시도하세요. (${err.message})`;
+    loadSched(); // 관리자가 시작 시각을 바꿨을 수 있음
     return;
   } finally {
-    $("getBtn").disabled = false;
+    busy = false;
     $("getBtn").textContent = "링크 받기";
+    renderLock();
   }
 
   $("resName").textContent = `${app.id}. ${app.name}`;

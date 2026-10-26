@@ -2,6 +2,7 @@
 --   participants : 인적사항 (휴대폰 번호 기준 1인 1행, 재방문 시 최신 정보로 갱신)
 --   downloads    : '링크 받기' 1회 = 1행 (앱 건별 기록)
 --   apps         : 앱 목록과 앱별 누적 다운로드 건수
+--   settings     : 운영 설정 (앱 선택 시작 시각 등)
 
 CREATE TABLE IF NOT EXISTS participants (
   id          BIGSERIAL PRIMARY KEY,
@@ -29,6 +30,13 @@ CREATE TABLE IF NOT EXISTS downloads (
   app_id          SMALLINT NOT NULL REFERENCES apps(id),
   app_name        TEXT NOT NULL,              -- 받은 시점의 앱 이름
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 운영 설정 (예: start_at = 앱 선택 시작 시각, ISO 8601)
+CREATE TABLE IF NOT EXISTS settings (
+  key         TEXT PRIMARY KEY,
+  value       TEXT,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS downloads_created_at_idx ON downloads (created_at DESC);
