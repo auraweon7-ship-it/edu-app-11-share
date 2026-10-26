@@ -1,0 +1,17 @@
+{
+  "name": "edu-app-11-share",
+  "version": "1.0.0",
+  "private": true,
+  "description": "교육 웹앱 10선 링크 배포 + 다운로드 히스토리(Postgres)",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}

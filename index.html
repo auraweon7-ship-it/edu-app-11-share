@@ -10,13 +10,14 @@
 <script src="config.js"></script>
 <script src="common.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="qr-poster.js"></script>
 </head>
 <body>
 <header class="top">
   <div class="top-in">
     <div class="brand">
       <p class="kicker">교수신문 AI 교육 웹앱 시리즈 · 관리자</p>
-      <p class="word"><b class="disp">DASHBOARD</b><span class="chip-tag disp" id="srcTag"></span></p>
+      <p class="word"><b class="disp">DASHBOARD</b><span class="chip-tag disp" id="appVersion"></span><span class="chip-tag disp" id="srcTag"></span></p>
       <p class="by">웹앱 10선 다운로드 현황 종합</p>
     </div>
     <div class="date disp" data-date></div>
@@ -28,11 +29,9 @@
   <div class="card">
     <div class="sec-head">🔑 DATA <small>—— 불러오기 · 필터 · 내보내기</small><span class="r" id="updated"></span></div>
     <div class="toolbar">
-      <input id="adminKey" type="password" placeholder="관리자 키 (Apps Script에 설정한 값)">
+      <input id="adminKey" type="password" placeholder="관리자 키 (.env 의 ADMIN_KEY)" autocomplete="current-password">
       <button class="pill dark sm" id="loadBtn">불러오기</button>
       <button class="pill sm" id="csvBtn">CSV 내보내기</button>
-      <button class="pill sm hidden" id="sampleBtn">샘플 데이터</button>
-      <button class="pill sm hidden" id="clearBtn">테스트 기록 비우기</button>
     </div>
     <div class="toolbar" style="margin-top:10px">
       <select id="fPeriod">
@@ -83,21 +82,53 @@
         <p class="chart-sub">건수</p>
         <div id="cUniv"></div>
       </div>
-      <div class="card span-6">
+      <div class="card span-12">
         <p class="chart-title">학과별 Top 10</p>
         <p class="chart-sub">건수</p>
         <div id="cDept"></div>
       </div>
-      <div class="card span-6">
-        <p class="chart-title">배포용 QR코드</p>
-        <p class="chart-sub">사용자 페이지 주소</p>
-        <div class="toolbar">
-          <input id="qrUrl" placeholder="사용자 페이지 URL">
-          <button class="pill dark sm" id="qrBtn">QR 생성</button>
-          <button class="pill sm" id="qrDown">PNG 저장</button>
-          <a class="pill sm" href="download.html" target="_blank" rel="noopener">웹앱 받기 페이지 열기</a>
+    </div>
+  </div>
+
+  <!-- QR 포스터 -->
+  <div class="section">
+    <div class="sec-head">🔳 QR POSTER <small>—— 배포용 QR코드 · 인쇄/게시용</small></div>
+    <div class="card qr-studio">
+      <div class="qr-preview"><canvas id="qrCanvas" aria-label="배포용 QR 포스터 미리보기"></canvas></div>
+      <div class="qr-controls">
+        <label for="qrUrl">사용자 페이지 주소</label>
+        <input id="qrUrl" placeholder="https://…/download.html">
+
+        <label for="qrLabel">중앙 문구</label>
+        <input id="qrLabel" value="교수신문" maxlength="6">
+
+        <label>레이아웃</label>
+        <div class="seg" id="qrLayout">
+          <button type="button" data-v="poster" class="on">포스터</button>
+          <button type="button" data-v="square">QR만</button>
         </div>
-        <div id="qr"></div>
+
+        <label>모듈 모양</label>
+        <div class="seg" id="qrShape">
+          <button type="button" data-v="round" class="on">라운드</button>
+          <button type="button" data-v="square">사각</button>
+        </div>
+
+        <label>포인트 색상</label>
+        <div class="swatches" id="qrColor">
+          <button type="button" data-v="#1d1d1f" style="--c:#1d1d1f" class="on" aria-label="잉크"></button>
+          <button type="button" data-v="#2f7bf6" style="--c:#2f7bf6" aria-label="블루"></button>
+          <button type="button" data-v="#1f3a68" style="--c:#1f3a68" aria-label="네이비"></button>
+          <button type="button" data-v="#8a1c2b" style="--c:#8a1c2b" aria-label="버건디"></button>
+          <button type="button" data-v="#2a6b3d" style="--c:#2a6b3d" aria-label="그린"></button>
+        </div>
+
+        <div class="row" style="margin-top:6px">
+          <button class="pill dark" id="qrDown">PNG 저장</button>
+          <button class="pill" id="qrPrint">인쇄</button>
+        </div>
+        <a class="pill" href="download.html" target="_blank" rel="noopener" style="margin-top:10px">웹앱 받기 페이지 열기</a>
+        <p class="note" id="qrNote">오류 복원 H 등급(약 30%)으로 생성되어 중앙 문구가 있어도 인식됩니다.</p>
       </div>
     </div>
   </div>
@@ -129,14 +160,11 @@ const ymd = d => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
 let rows = [];
 
 // ---------- 초기화 ----------
-$("srcTag").textContent = GAS_URL ? "SHEETS" : "TEST";
-if (!GAS_URL) {
-  $("adminKey").classList.add("hidden");
-  $("sampleBtn").classList.remove("hidden");
-  $("clearBtn").classList.remove("hidden");
-  $("loadMsg").textContent = "테스트 모드: 이 브라우저에 저장된 기록만 표시됩니다. 운영 시 config.js에 GAS_URL을 설정하세요.";
-  $("loadMsg").style.color = "var(--mute)";
-}
+$("appVersion").textContent = APP_VERSION;
+$("srcTag").textContent = "POSTGRES";
+// 관리자 키는 이 탭에서만 기억
+try { $("adminKey").value = sessionStorage.getItem("edu_admin_key") || ""; } catch (e) {}
+$("adminKey").addEventListener("keydown", e => { if (e.key === "Enter") load(); });
 APPS.forEach(a => $("fApp").insertAdjacentHTML("beforeend", `<option>${esc(appLabel(a))}</option>`));
 ROLES.forEach(r => $("fRole").insertAdjacentHTML("beforeend", `<option>${r}</option>`));
 
@@ -267,18 +295,15 @@ function render() {
 // ---------- 데이터 ----------
 async function load() {
   try {
-    if (!GAS_URL) {
-      rows = JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]");
-    } else {
-      const key = $("adminKey").value.trim();
-      if (!key) { $("loadMsg").textContent = "관리자 키를 입력하세요."; return; }
-      $("loadMsg").textContent = "";
-      $("loadBtn").disabled = true;
-      const res = await fetch(`${GAS_URL}?key=${encodeURIComponent(key)}`);
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "불러오기 실패");
-      rows = data.rows;
-    }
+    const key = $("adminKey").value.trim();
+    if (!key) { $("loadMsg").textContent = "관리자 키를 입력하세요."; return; }
+    $("loadMsg").textContent = "";
+    $("loadBtn").disabled = true;
+    const res = await fetch(API_URL, { headers: { "x-admin-key": key } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    rows = data.rows;
+    try { sessionStorage.setItem("edu_admin_key", key); } catch (e) {}
     rows.sort((a, b) => String(b.time).localeCompare(String(a.time)));
     $("updated").textContent = `업데이트 ${new Date().toLocaleTimeString("ko-KR")}`;
     render();
@@ -305,47 +330,36 @@ $("csvBtn").addEventListener("click", () => {
   URL.revokeObjectURL(a.href);
 });
 
-// 테스트 모드 전용: 대시보드 미리보기용 샘플
-$("sampleBtn").addEventListener("click", () => {
-  const names = ["김민준", "이서연", "박지호", "최수아", "정예준", "강하은", "조도윤", "윤지우", "장시우", "임서윤"];
-  const unis = ["한국대학교", "서울미래대학교", "동해대학교", "중앙교육대학교", "남부과학기술원", "새빛대학교"];
-  const depts = ["교육학과", "중국학과", "경영학과", "컴퓨터공학과", "국어국문학과", "간호학과", "미디어학과"];
-  const pick = a => a[Math.floor(Math.random() ** 1.6 * a.length)];
-  const list = [];
-  for (let i = 0; i < 160; i++) {
-    const d = new Date(); d.setDate(d.getDate() - Math.floor(Math.random() ** 1.5 * 21));
-    d.setHours(9 + Math.floor(Math.random() * 10), Math.floor(Math.random() * 60), Math.floor(Math.random() * 60));
-    const n = Math.floor(Math.random() * 40), app = APPS[Math.floor(Math.random() ** 1.3 * 10)];
-    list.push({ time: `${ymd(d)} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`,
-      name: names[n % 10], univ: pick(unis), dept: pick(depts), major: "-", role: pick(ROLES),
-      phone: `010-${1000 + n}-${2000 + n}`, app: appLabel(app) });
-  }
-  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); } catch (e) {}
-  load();
-});
-$("clearBtn").addEventListener("click", () => {
-  if (!confirm("이 브라우저의 테스트 기록을 모두 비울까요?")) return;
-  try { localStorage.removeItem(LOCAL_KEY); } catch (e) {}
-  load();
-});
-
-// ---------- QR ----------
+// ---------- QR 포스터 ----------
+const qrOpts = { layout: "poster", shape: "round", color: "#1d1d1f" };
 $("qrUrl").value = new URL("download.html", location.href).href;
-function makeQR() {
-  $("qr").innerHTML = "";
-  new QRCode($("qr"), { text: $("qrUrl").value.trim(), width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
-}
-$("qrBtn").addEventListener("click", makeQR);
+const drawQR = () => QRPoster.draw($("qrCanvas"), { ...qrOpts, url: $("qrUrl").value.trim(), label: $("qrLabel").value.trim() });
+[["qrLayout", "layout"], ["qrShape", "shape"], ["qrColor", "color"]].forEach(([id, key]) => {
+  $(id).addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    $(id).querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+    qrOpts[key] = b.dataset.v;
+    drawQR();
+  });
+});
+["qrUrl", "qrLabel"].forEach(id => $(id).addEventListener("input", drawQR));
 $("qrDown").addEventListener("click", () => {
-  const img = $("qr").querySelector("img"), cv = $("qr").querySelector("canvas");
   const a = document.createElement("a");
-  a.href = (img && img.src && img.src.startsWith("data:")) ? img.src : cv.toDataURL("image/png");
-  a.download = "edu-app-qr.png";
+  a.href = $("qrCanvas").toDataURL("image/png");
+  a.download = `edu-apps-qr-${qrOpts.layout}.png`;
   a.click();
 });
-makeQR();
+$("qrPrint").addEventListener("click", () => {
+  const w = window.open("", "_blank");
+  if (!w) return;
+  w.document.write(`<title>QR 포스터 인쇄</title><style>@page{margin:12mm}body{margin:0;display:grid;place-items:center;min-height:100vh}
+    img{max-width:100%;max-height:96vh}</style><img src="${$("qrCanvas").toDataURL("image/png")}" onload="print()">`);
+  w.document.close();
+});
+document.fonts.ready.then(drawQR);
 
-if (!GAS_URL) load(); else render();
+if ($("adminKey").value) load(); else render();
 </script>
 </body>
 </html>
