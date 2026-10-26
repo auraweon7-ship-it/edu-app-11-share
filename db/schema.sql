@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS downloads (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- "기사가 유용했나요?" 별점 1~5 (참여자별 최근 응답)
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS rating SMALLINT CHECK (rating BETWEEN 1 AND 5);
+
+-- 앱별 선택 시작 시각 (NULL = 앱별 제한 없음)
+ALTER TABLE apps ADD COLUMN IF NOT EXISTS start_at TIMESTAMPTZ;
+
 -- 운영 설정 (예: start_at = 앱 선택 시작 시각, ISO 8601)
 CREATE TABLE IF NOT EXISTS settings (
   key         TEXT PRIMARY KEY,

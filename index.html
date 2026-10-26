@@ -58,6 +58,25 @@
     </div>
     <p class="note">시작 전에도 참가자는 인적사항을 입력할 수 있고, 앱 선택은 잠긴 채 카운트다운이 표시됩니다. 시작 시각이 되면 자동으로 열립니다. 저장하려면 관리자 키가 필요합니다.</p>
     <div class="err-msg" id="schedMsg"></div>
+
+    <div class="sub-head">앱별 공개 일정 <small>— 비워 두면 전체 시작 시각만 적용 · 둘 다 지나야 선택 가능</small></div>
+    <div class="table-wrap sched-table">
+      <table>
+        <thead><tr><th>앱</th><th>공개 시각</th><th>상태</th><th class="act">지우기</th></tr></thead>
+        <tbody id="appSchedBody"></tbody>
+      </table>
+    </div>
+    <div class="toolbar" style="margin-top:12px">
+      <input id="bulkAt" type="datetime-local" step="60" aria-label="일괄 적용할 공개 시각">
+      <button class="pill sm" id="bulkFill">모든 앱에 채우기</button>
+      <button class="pill sm" id="bulkStep">1번부터 간격 채우기</button>
+      <select id="bulkGap" aria-label="간격">
+        <option value="10">10분 간격</option><option value="30">30분 간격</option>
+        <option value="60" selected>1시간 간격</option><option value="1440">하루 간격</option>
+      </select>
+      <button class="pill dark sm" id="appSchedSave">앱별 일정 저장</button>
+    </div>
+    <div class="err-msg" id="appSchedMsg"></div>
   </div>
 
   <!-- KPI -->
@@ -148,12 +167,13 @@
 
   <!-- 표 -->
   <div class="section">
-    <div class="sec-head">🗂 HISTORY <small>—— 다운로드 기록</small><span class="r" id="rowCount"></span></div>
+    <div class="sec-head">🗂 HISTORY <small>—— 다운로드 기록</small><span class="r" id="rowCount"></span>
+      <button class="pill sm" id="histCsv" title="현재 필터가 적용된 기록을 CSV로 저장">⬇ CSV 다운로드</button></div>
     <div class="table-wrap">
       <table>
         <thead><tr>
           <th>#</th><th>일시</th><th>성명</th><th>대학</th><th>학과</th><th>전공</th>
-          <th>신분</th><th>휴대폰</th><th>다운로드 앱</th><th class="act">관리</th>
+          <th>신분</th><th>휴대폰</th><th>기사 유용도</th><th>다운로드 앱</th><th class="act">관리</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -172,6 +192,9 @@
         <div><label for="eMajor">전공</label><input id="eMajor" maxlength="50"></div>
         <div><label for="eRole">신분</label><select id="eRole"></select></div>
         <div><label for="ePhone">휴대폰</label><input id="ePhone" type="tel" inputmode="numeric" maxlength="13"></div>
+        <div><label for="eRating">기사 유용도</label><select id="eRating"><option value="">선택</option>
+          <option value="5">★★★★★ 5점</option><option value="4">★★★★ 4점</option><option value="3">★★★ 3점</option>
+          <option value="2">★★ 2점</option><option value="1">★ 1점</option></select></div>
       </div>
       <label for="eApp">다운로드 앱</label>
       <select id="eApp"></select>
@@ -192,8 +215,9 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const COLS = ["time", "name", "univ", "dept", "major", "role", "phone", "app"];
-const HEAD = ["일시", "성명", "대학", "학과", "전공", "신분", "휴대폰", "다운로드 앱"];
+const COLS = ["time", "name", "univ", "dept", "major", "role", "phone", "rating", "app"];
+const HEAD = ["일시", "성명", "대학", "학과", "전공", "신분", "휴대폰", "기사 유용도", "다운로드 앱"];
+const starCell = n => n ? `<span class="star-cell" title="${n}점">${"★".repeat(n)}<span class="off">${"★".repeat(5 - n)}</span></span>` : '<span class="mute">–</span>';
 const ROLES = ["교수", "강사", "연구원", "교직원", "대학원생", "학부생", "기타"];
 const appLabel = a => `${a.id}. ${a.name}`;
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -291,6 +315,8 @@ function render() {
   const univs = new Set(list.map(r => r.univ)).size;
   const todayN = list.filter(r => String(r.time).startsWith(today)).length;
   const appCnt = countBy(list, "app");
+  const ratingBy = new Map(list.filter(r => r.rating).map(r => [r.phone, r.rating]));
+  const ratingN = ratingBy.size, ratingAvg = ratingN ? [...ratingBy.values()].reduce((a, b) => a + b, 0) / ratingN : 0;
   const top = [...appCnt].sort((a, b) => b[1] - a[1])[0];
 
   $("kpis").innerHTML = [
@@ -299,6 +325,7 @@ function render() {
     ["참여 대학", univs, "곳"],
     ["오늘 다운로드", todayN, today],
     ["1인당 평균", people ? (total / people).toFixed(1) : "0", "건"],
+    ["기사 유용도", ratingAvg ? `★ ${ratingAvg.toFixed(1)}` : "–", ratingN ? `5점 만점 · 응답 ${ratingN}명` : "응답 없음"],
     ["인기 앱", top ? top[0].split(".")[0] + "번" : "–", top ? `${top[0].replace(/^\d+\.\s*/, "")} · ${top[1]}건` : "기록 없음"]
   ].map(([lb, v, s]) => `<div class="kpi"><div class="lb">${lb}</div><div class="v disp">${esc(v)}</div><div class="s">${esc(s)}</div></div>`).join("");
 
@@ -335,9 +362,9 @@ function render() {
 
   $("rowCount").textContent = `${total}건`;
   $("tbody").innerHTML = list.map((r, i) =>
-    `<tr><td>${total - i}</td>${COLS.map(c => `<td>${esc(r[c])}</td>`).join("")}
+    `<tr><td>${total - i}</td>${COLS.map(c => `<td>${c === "rating" ? starCell(r[c]) : esc(r[c])}</td>`).join("")}
       <td class="act"><button class="mini" data-edit="${r.id}">수정</button><button class="mini danger" data-del="${r.id}">삭제</button></td></tr>`).join("")
-    || `<tr><td colspan="10" style="text-align:center;color:var(--mute)">기록 없음</td></tr>`;
+    || `<tr><td colspan="11" style="text-align:center;color:var(--mute)">기록 없음</td></tr>`;
 }
 
 // ---------- 데이터 ----------
@@ -387,10 +414,72 @@ function renderSched() {
     : `<b>진행 중</b> · ${esc(fmtKST(sched.startAt))}부터 앱 선택 가능`;
 }
 function applySched(data) {
-  sched = { startAt: data.startAt ? new Date(data.startAt) : null, offset: new Date(data.now) - Date.now() };
+  sched = { ...sched, startAt: data.startAt ? new Date(data.startAt) : null, offset: new Date(data.now) - Date.now() };
   if (sched.startAt) $("schedAt").value = toLocalInput(sched.startAt);
+  if (data.apps) applyAppSched(data);
   renderSched();
 }
+
+// ---------- 앱별 공개 일정 ----------
+let appSched = {};
+$("appSchedBody").innerHTML = APPS.map(a => `
+  <tr data-app="${a.id}">
+    <td>${esc(appLabel(a))}</td>
+    <td><input type="datetime-local" step="60" class="field app-at" aria-label="${esc(a.name)} 공개 시각"></td>
+    <td class="app-st"></td>
+    <td class="act"><button class="mini" data-clear="${a.id}">지우기</button></td>
+  </tr>`).join("");
+const appInput = id => document.querySelector(`tr[data-app="${id}"] .app-at`);
+function applyAppSched(data) {
+  sched.offset = new Date(data.now) - Date.now();
+  appSched = Object.fromEntries(data.apps.map(a => [a.id, a.startAt ? new Date(a.startAt) : null]));
+  APPS.forEach(a => { appInput(a.id).value = appSched[a.id] ? toLocalInput(appSched[a.id]) : ""; });
+  renderAppSched();
+}
+function renderAppSched() {
+  const now = Date.now() + sched.offset;
+  APPS.forEach(a => {
+    const td = document.querySelector(`tr[data-app="${a.id}"] .app-st`);
+    const own = appSched[a.id], eff = [own, sched.startAt].filter(Boolean).sort((x, y) => y - x)[0];
+    if (!eff) { td.innerHTML = `<span class="st on">제한 없음</span>`; return; }
+    const left = eff - now;
+    td.innerHTML = left > 0
+      ? `<span class="st wait">공개 전</span> <span class="disp">${remainText(left)}</span>${!own || own < sched.startAt ? ' <small class="mute">(전체 시각)</small>' : ""}`
+      : `<span class="st on">공개 중</span>`;
+  });
+}
+$("appSchedBody").addEventListener("click", e => {
+  const id = e.target.closest("[data-clear]")?.dataset.clear;
+  if (id) appInput(id).value = "";
+});
+$("bulkFill").addEventListener("click", () => {
+  if (!$("bulkAt").value) { $("appSchedMsg").style.color = ""; $("appSchedMsg").textContent = "채울 공개 시각을 먼저 선택하세요."; return; }
+  APPS.forEach(a => { appInput(a.id).value = $("bulkAt").value; });
+});
+$("bulkStep").addEventListener("click", () => {
+  if (!$("bulkAt").value) { $("appSchedMsg").style.color = ""; $("appSchedMsg").textContent = "1번 앱의 공개 시각을 먼저 선택하세요."; return; }
+  const base = new Date($("bulkAt").value), gap = Number($("bulkGap").value);
+  APPS.forEach((a, i) => { appInput(a.id).value = toLocalInput(new Date(base.getTime() + i * gap * 60000)); });
+});
+$("appSchedSave").addEventListener("click", async () => {
+  const msg = $("appSchedMsg");
+  msg.style.color = ""; msg.textContent = "";
+  if (!$("adminKey").value.trim()) { msg.textContent = "관리자 키를 먼저 입력하세요."; return; }
+  const apps = APPS.map(a => ({ id: a.id, startAt: appInput(a.id).value ? new Date(appInput(a.id).value).toISOString() : null }));
+  try {
+    const res = await fetch(SETTINGS_URL + "/apps", {
+      method: "PUT", headers: { "Content-Type": "application/json", "x-admin-key": $("adminKey").value.trim() },
+      body: JSON.stringify({ apps })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    applyAppSched(data);
+    msg.style.color = "rgb(var(--ok))";
+    msg.textContent = `앱별 공개 일정을 저장했습니다 (${apps.filter(a => a.startAt).length}개 앱 예약).`;
+  } catch (err) {
+    msg.textContent = "저장 실패: " + err.message;
+  }
+});
 async function loadSched() {
   try {
     const res = await fetch(SETTINGS_URL);
@@ -421,7 +510,7 @@ $("schedSave").addEventListener("click", () => {
   saveSched(new Date($("schedAt").value).toISOString());
 });
 $("schedNow").addEventListener("click", () => saveSched(null));
-setInterval(renderSched, 1000);
+setInterval(() => { renderSched(); renderAppSched(); }, 1000);
 loadSched();
 
 // ---------- 기록 수정 · 삭제 ----------
@@ -433,7 +522,7 @@ const api = (path, opts = {}) => fetch(API_URL + path, {
   return data;
 });
 const histToast = msg => { $("histToast").textContent = msg; setTimeout(() => { if ($("histToast").textContent === msg) $("histToast").textContent = ""; }, 4000); };
-const EDIT = { eName: "name", eUniv: "univ", eDept: "dept", eMajor: "major", eRole: "role", ePhone: "phone" };
+const EDIT = { eName: "name", eUniv: "univ", eDept: "dept", eMajor: "major", eRole: "role", ePhone: "phone", eRating: "rating" };
 ROLES.forEach(r => $("eRole").insertAdjacentHTML("beforeend", `<option>${r}</option>`));
 APPS.forEach(a => $("eApp").insertAdjacentHTML("beforeend", `<option value="${a.id}">${esc(appLabel(a))}</option>`));
 $("ePhone").addEventListener("input", e => {
@@ -450,7 +539,7 @@ $("tbody").addEventListener("click", async e => {
 
   if (b.dataset.edit) {
     editing = r;
-    Object.entries(EDIT).forEach(([id, k]) => $(id).value = r[k]);
+    Object.entries(EDIT).forEach(([id, k]) => $(id).value = r[k] ?? "");
     $("eApp").value = r.appId;
     $("editMeta").textContent = r.time;
     $("editNote").textContent = r.personCount > 1
@@ -478,7 +567,8 @@ $("editForm").addEventListener("submit", async e => {
   e.preventDefault();
   const body = Object.fromEntries(Object.entries(EDIT).map(([id, k]) => [k, $(id).value.trim()]));
   body.appId = Number($("eApp").value);
-  if (Object.values(body).some(v => v === "")) { $("editErr").textContent = "모든 항목을 입력하세요."; return; }
+  if (Object.values(body).some(v => v === "")) { $("editErr").textContent = "모든 항목을 입력하세요 (기사 유용도 포함)."; return; }
+  body.rating = Number(body.rating);
   if (!/^01[016789]-\d{3,4}-\d{4}$/.test(body.phone)) { $("editErr").textContent = "휴대폰 번호 형식을 확인하세요."; return; }
   $("editSave").disabled = true;
   try {
@@ -493,16 +583,26 @@ $("editForm").addEventListener("submit", async e => {
   }
 });
 
-$("csvBtn").addEventListener("click", () => {
+// 현재 필터가 적용된 기록을 CSV로 (엑셀 한글 깨짐 방지 BOM, 수식 주입 방지)
+function exportCSV() {
   const list = filtered();
-  const cell = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const csv = [HEAD.map(cell).join(","), ...list.map(r => COLS.map(c => cell(r[c])).join(","))].join("\r\n");
+  if (!list.length) { histToast(rows.length ? "필터 결과가 없어 내보낼 기록이 없습니다." : "먼저 관리자 키로 기록을 불러오세요."); return; }
+  const cell = v => {
+    let s = String(v ?? "");
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+  const csv = [["번호", ...HEAD].map(cell).join(","),
+    ...list.map((r, i) => [list.length - i, ...COLS.map(c => r[c])].map(cell).join(","))].join("\r\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
   a.download = `download-history-${ymd(new Date())}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
-});
+  histToast(`CSV ${list.length}건을 저장했습니다.`);
+}
+$("csvBtn").addEventListener("click", exportCSV);
+$("histCsv").addEventListener("click", exportCSV);
 
 // ---------- QR 포스터 ----------
 const qrOpts = { layout: "poster", shape: "round", color: "#1d1d1f" };

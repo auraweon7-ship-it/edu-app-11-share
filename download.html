@@ -72,6 +72,19 @@
     <input id="phone" type="tel" inputmode="numeric" placeholder="010-0000-0000" maxlength="13">
     <div class="err-msg" data-for="phone"></div>
 
+    <fieldset class="rating" id="rating">
+      <legend>기사가 유용했나요? <span class="req">*</span></legend>
+      <div class="stars" role="radiogroup" aria-label="기사 유용도 별점">
+        <label><input type="radio" name="rating" value="1" aria-label="별 1개"><span>★</span></label>
+        <label><input type="radio" name="rating" value="2" aria-label="별 2개"><span>★</span></label>
+        <label><input type="radio" name="rating" value="3" aria-label="별 3개"><span>★</span></label>
+        <label><input type="radio" name="rating" value="4" aria-label="별 4개"><span>★</span></label>
+        <label><input type="radio" name="rating" value="5" aria-label="별 5개"><span>★</span></label>
+        <span class="star-text" id="starText">별을 눌러 선택하세요</span>
+      </div>
+    </fieldset>
+    <div class="err-msg" id="ratingErr"></div>
+
     <div class="consent">
       <div class="consent-head">🔒 개인정보 수집·이용 안내 <small>(필수)</small></div>
       <dl class="consent-body" id="privacy"></dl>
@@ -139,11 +152,25 @@ const syncAgree = () => {
 };
 $("agree").addEventListener("change", syncAgree);
 
+// "기사가 유용했나요?" 별 1~5 (선택한 별까지 채움, 마우스를 올리면 미리보기)
+const STAR_TEXT = ["", "전혀 유용하지 않았어요", "별로 유용하지 않았어요", "보통이에요", "유용했어요", "매우 유용했어요"];
+const starLabels = [...document.querySelectorAll("#rating .stars label")];
+const ratingVal = () => Number(document.querySelector('input[name="rating"]:checked')?.value || 0);
+function paintStars(n) {
+  starLabels.forEach((l, i) => l.classList.toggle("on", i < n));
+  $("starText").textContent = n ? `${n}점 · ${STAR_TEXT[n]}` : "별을 눌러 선택하세요";
+}
+starLabels.forEach((l, i) => {
+  l.addEventListener("mouseenter", () => paintStars(i + 1));
+  l.querySelector("input").addEventListener("change", () => { paintStars(ratingVal()); $("ratingErr").textContent = ""; });
+});
+$("rating").addEventListener("mouseleave", () => paintStars(ratingVal()));
+
 // 앱 목록 렌더
 $("apps").innerHTML = APPS.map(a => `
   <label class="app">
     <input type="radio" name="app" value="${a.id}">
-    <span><span class="bullet disp">${String(a.id).padStart(2, "0")}</span>${a.name}</span>
+    <span><span class="bullet disp">${String(a.id).padStart(2, "0")}</span>${a.name}<span class="soon hidden"></span></span>
   </label>`).join("");
 
 // 이 기기에서 이전 입력값 복원
@@ -171,16 +198,39 @@ function step(n) {
 }
 
 // ---------- 앱 선택 시작 시각: 시작 전에는 앱 선택 잠금 + 카운트다운 ----------
-let sched = { startAt: null, offset: 0 }, busy = false;
+let sched = { startAt: null, apps: {}, offset: 0 }, busy = false;
 const isLocked = () => !!sched.startAt && sched.startAt - (Date.now() + sched.offset) > 0;
+const appLeft = id => sched.apps[id] ? sched.apps[id] - (Date.now() + sched.offset) : 0;
 async function loadSched() {
   try {
     const d = await fetch(SETTINGS_URL).then(r => r.json());
-    if (d.ok) sched = { startAt: d.startAt ? new Date(d.startAt) : null, offset: new Date(d.now) - Date.now() };
+    if (d.ok) sched = {
+      startAt: d.startAt ? new Date(d.startAt) : null,
+      apps: Object.fromEntries((d.apps || []).filter(a => a.startAt).map(a => [a.id, new Date(a.startAt)])),
+      offset: new Date(d.now) - Date.now()
+    };
   } catch (e) { /* 설정을 못 읽으면 서버가 최종 판단 */ }
   renderLock();
 }
+// 앱별 공개 시각: 공개 전 앱은 선택 불가 + 배지에 카운트다운
+function renderAppLocks() {
+  const p = n => String(n).padStart(2, "0");
+  document.querySelectorAll("#apps .app").forEach(label => {
+    const input = label.querySelector("input"), badge = label.querySelector(".soon");
+    const left = appLeft(Number(input.value)), closed = left > 0;
+    label.classList.toggle("closed", closed);
+    input.disabled = closed;
+    if (closed && input.checked) input.checked = false;
+    badge.classList.toggle("hidden", !closed);
+    if (!closed) return;
+    const s = Math.floor(left / 1000), d = Math.floor(s / 86400);
+    const at = sched.apps[input.value];
+    badge.textContent = `${at.getMonth() + 1}/${at.getDate()} ${p(at.getHours())}:${p(at.getMinutes())} 공개 · ` +
+      (d ? `${d}일 ` : "") + `${p(Math.floor(s % 86400 / 3600))}:${p(Math.floor(s % 3600 / 60))}:${p(s % 60)}`;
+  });
+}
 function renderLock() {
+  renderAppLocks();
   const locked = isLocked();
   $("lockBanner").classList.toggle("hidden", !locked);
   $("apps").classList.toggle("locked", locked);
@@ -209,6 +259,7 @@ $("infoForm").addEventListener("submit", e => {
     if (msg) ok = false;
     data[f] = v;
   });
+  if (!ratingVal()) { $("ratingErr").textContent = "'기사가 유용했나요?' 별점을 선택하세요."; ok = false; }
   if (!$("agree").checked) { $("agreeErr").textContent = "개인정보 수집·이용에 동의해야 웹앱을 선택할 수 있습니다."; ok = false; }
   if (!ok) return;
   info = data;
@@ -234,6 +285,7 @@ $("appForm").addEventListener("submit", async e => {
   if (isLocked()) { $("appErr").textContent = "아직 앱 선택 시작 전입니다."; return; }
   const sel = document.querySelector('input[name="app"]:checked');
   if (!sel) { $("appErr").textContent = "웹앱 1개를 선택하세요."; return; }
+  if (appLeft(Number(sel.value)) > 0) { $("appErr").textContent = "이 앱은 아직 공개 전입니다."; return; }
   $("appErr").textContent = "";
   const app = APPS.find(a => a.id === Number(sel.value));
 
@@ -241,7 +293,7 @@ $("appForm").addEventListener("submit", async e => {
   $("getBtn").disabled = true;
   $("getBtn").textContent = "처리 중…";
   try {
-    await record({ ...info, appId: app.id, agree: $("agree").checked });
+    await record({ ...info, appId: app.id, rating: ratingVal(), agree: $("agree").checked });
   } catch (err) {
     $("appErr").textContent = `기록 저장에 실패했습니다. 잠시 후 다시 시도하세요. (${err.message})`;
     loadSched(); // 관리자가 시작 시각을 바꿨을 수 있음
