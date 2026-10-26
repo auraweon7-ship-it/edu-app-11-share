@@ -179,7 +179,7 @@
       <table>
         <thead><tr>
           <th>#</th><th>일시</th><th>성명</th><th>대학</th><th>학과</th><th>전공</th>
-          <th>신분</th><th>휴대폰</th><th>기사 유용도</th><th>다운로드 앱</th><th class="act">관리</th>
+          <th>신분</th><th>휴대폰</th><th>기사 유용도</th><th>유료 교육 참여 의사</th><th>다운로드 앱</th><th class="act">관리</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -201,6 +201,8 @@
         <div><label for="eRating">기사 유용도</label><select id="eRating"><option value="">선택</option>
           <option value="5">★★★★★ 5점</option><option value="4">★★★★ 4점</option><option value="3">★★★ 3점</option>
           <option value="2">★★ 2점</option><option value="1">★ 1점</option></select></div>
+        <div><label for="ePaid">유료 교육 참여 의사</label><select id="ePaid"><option value="">선택</option>
+          <option value="yes">예</option><option value="no">아니오</option></select></div>
       </div>
       <label for="eApp">다운로드 앱</label>
       <select id="eApp"></select>
@@ -221,8 +223,10 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const COLS = ["time", "name", "univ", "dept", "major", "role", "phone", "rating", "app"];
-const HEAD = ["일시", "성명", "대학", "학과", "전공", "신분", "휴대폰", "기사 유용도", "다운로드 앱"];
+const COLS = ["time", "name", "univ", "dept", "major", "role", "phone", "rating", "paid", "app"];
+const HEAD = ["일시", "성명", "대학", "학과", "전공", "신분", "휴대폰", "기사 유용도", "유료 교육 참여 의사", "다운로드 앱"];
+const paidText = v => v === true ? "예" : v === false ? "아니오" : "";
+const paidCell = t => t ? `<span class="yn-cell ${t === "예" ? "y" : "n"}">${t}</span>` : '<span class="mute">–</span>';
 const starCell = n => n ? `<span class="star-cell" title="${n}점">${"★".repeat(n)}<span class="off">${"★".repeat(5 - n)}</span></span>` : '<span class="mute">–</span>';
 const ROLES = ["교수", "강사", "연구원", "교직원", "대학원생", "학부생", "기타"];
 const appLabel = a => `${a.id}. ${a.name}`;
@@ -323,6 +327,8 @@ function render() {
   const appCnt = countBy(list, "app");
   const ratingBy = new Map(list.filter(r => r.rating).map(r => [r.phone, r.rating]));
   const ratingN = ratingBy.size, ratingAvg = ratingN ? [...ratingBy.values()].reduce((a, b) => a + b, 0) / ratingN : 0;
+  const paidBy = new Map(list.filter(r => r.paid).map(r => [r.phone, r.paid]));
+  const paidN = paidBy.size, paidYes = [...paidBy.values()].filter(v => v === "예").length;
   const top = [...appCnt].sort((a, b) => b[1] - a[1])[0];
 
   $("kpis").innerHTML = [
@@ -331,6 +337,7 @@ function render() {
     ["참여 대학", univs, "곳"],
     ["오늘 다운로드", todayN, today],
     ["1인당 평균", people ? (total / people).toFixed(1) : "0", "건"],
+    ["유료 교육 참여 의사", paidN ? `예 ${paidYes}명` : "–", paidN ? `응답 ${paidN}명 중 ${Math.round(paidYes / paidN * 100)}%` : "응답 없음"],
     ["기사 유용도", ratingAvg ? `★ ${ratingAvg.toFixed(1)}` : "–", ratingN ? `5점 만점 · 응답 ${ratingN}명` : "응답 없음"],
     ["인기 앱", top ? top[0].split(".")[0] + "번" : "–", top ? `${top[0].replace(/^\d+\.\s*/, "")} · ${top[1]}건` : "기록 없음"]
   ].map(([lb, v, s]) => `<div class="kpi"><div class="lb">${lb}</div><div class="v disp">${esc(v)}</div><div class="s">${esc(s)}</div></div>`).join("");
@@ -368,9 +375,9 @@ function render() {
 
   $("rowCount").textContent = `${total}건`;
   $("tbody").innerHTML = list.map((r, i) =>
-    `<tr><td>${total - i}</td>${COLS.map(c => `<td>${c === "rating" ? starCell(r[c]) : esc(r[c])}</td>`).join("")}
+    `<tr><td>${total - i}</td>${COLS.map(c => `<td>${c === "rating" ? starCell(r[c]) : c === "paid" ? paidCell(r[c]) : esc(r[c])}</td>`).join("")}
       <td class="act"><button class="mini" data-edit="${r.id}">수정</button><button class="mini danger" data-del="${r.id}">삭제</button></td></tr>`).join("")
-    || `<tr><td colspan="11" style="text-align:center;color:var(--mute)">기록 없음</td></tr>`;
+    || `<tr><td colspan="12" style="text-align:center;color:var(--mute)">기록 없음</td></tr>`;
 }
 
 // ---------- 데이터 ----------
@@ -383,7 +390,7 @@ async function load() {
     const res = await fetch(API_URL, { headers: { "x-admin-key": key } });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    rows = data.rows;
+    rows = data.rows.map(r => ({ ...r, paid: paidText(r.paidInterest) }));
     dbApps = data.apps || [];
     dbParticipants = data.participants || 0;
     try { sessionStorage.setItem("edu_admin_key", key); } catch (e) {}
@@ -588,6 +595,7 @@ $("tbody").addEventListener("click", async e => {
     editing = r;
     Object.entries(EDIT).forEach(([id, k]) => $(id).value = r[k] ?? "");
     $("eApp").value = r.appId;
+    $("ePaid").value = r.paidInterest === true ? "yes" : r.paidInterest === false ? "no" : "";
     $("editMeta").textContent = r.time;
     $("editNote").textContent = r.personCount > 1
       ? `인적사항 수정은 이 참여자의 기록 ${r.personCount}건 모두에 반영됩니다. 앱 변경은 이 기록에만 적용됩니다.`
@@ -616,6 +624,8 @@ $("editForm").addEventListener("submit", async e => {
   body.appId = Number($("eApp").value);
   if (Object.values(body).some(v => v === "")) { $("editErr").textContent = "모든 항목을 입력하세요 (기사 유용도 포함)."; return; }
   body.rating = Number(body.rating);
+  if (!$("ePaid").value) { $("editErr").textContent = "유료 교육 참여 의사를 선택하세요."; return; }
+  body.paidInterest = $("ePaid").value === "yes";
   if (!/^01[016789]-\d{3,4}-\d{4}$/.test(body.phone)) { $("editErr").textContent = "휴대폰 번호 형식을 확인하세요."; return; }
   $("editSave").disabled = true;
   try {

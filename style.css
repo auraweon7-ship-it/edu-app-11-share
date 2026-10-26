@@ -83,6 +83,15 @@ input::placeholder { color: #a2a2a8; }
 .stars input:focus-visible + span { outline: 2px solid rgb(var(--accent)); outline-offset: 2px; border-radius: 4px; }
 .star-text { margin-left: 8px; font-size: .78rem; font-weight: 600; color: var(--mute); }
 
+/* 예/아니오 문항 */
+.yn { border: 0; margin: 14px 0 0; padding: 0; min-width: 0; }
+.yn legend { font-size: .75rem; font-weight: 700; padding: 0; margin-bottom: 6px; line-height: 1.5; }
+.yn-seg label { flex: 1; margin: 0; cursor: pointer; }
+.yn-seg input { position: absolute; opacity: 0; pointer-events: none; }
+.yn-seg span { display: block; text-align: center; padding: 9px 0; border-radius: 999px; font-size: .88rem; font-weight: 500; color: var(--mute); }
+.yn-seg input:checked + span { background: var(--face); color: var(--ink); font-weight: 700; box-shadow: var(--raise-sm); }
+.yn-seg input:focus-visible + span { box-shadow: var(--focus); }
+
 /* 개인정보 동의 */
 .consent { margin-top: 18px; padding: 14px 16px; border-radius: 1rem; background: var(--sunk); box-shadow: var(--press); }
 .consent-head { font-size: .8rem; font-weight: 700; }
@@ -253,6 +262,9 @@ th.act, td.act { position: sticky; right: 0; background: var(--sunk); text-align
 #histCsv { margin-left: 10px; letter-spacing: 0; }
 .star-cell { color: #f2b01e; letter-spacing: 1px; }
 .star-cell .off { color: #c9c9cd; }
+.yn-cell { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: .72rem; font-weight: 700; }
+.yn-cell.y { color: rgb(var(--ok)); background: rgba(var(--ok),.1); }
+.yn-cell.n { color: var(--mute); background: rgba(0,0,0,.05); }
 
 /* 푸터:헤더와 같은 돌출 슬랩, 위쪽 음각선 */
 .foot { margin-top: 24px; padding: 22px 16px 26px; text-align: center; background: var(--face);

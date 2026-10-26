@@ -85,6 +85,15 @@
     </fieldset>
     <div class="err-msg" id="ratingErr"></div>
 
+    <fieldset class="yn" id="paidInterest">
+      <legend>교육 웹앱, 미디어 제작, 웹플랫폼 구축에 대한 유료 교육과정에 참여할 의사는? <span class="req">*</span></legend>
+      <div class="seg yn-seg" role="radiogroup">
+        <label><input type="radio" name="paidInterest" value="yes"><span>예</span></label>
+        <label><input type="radio" name="paidInterest" value="no"><span>아니오</span></label>
+      </div>
+    </fieldset>
+    <div class="err-msg" id="paidErr"></div>
+
     <div class="consent">
       <div class="consent-head">🔒 개인정보 수집·이용 안내 <small>(필수)</small></div>
       <dl class="consent-body" id="privacy"></dl>
@@ -167,6 +176,10 @@ starLabels.forEach((l, i) => {
   l.querySelector("input").addEventListener("change", () => { paintStars(ratingVal()); $("ratingErr").textContent = ""; });
 });
 $("rating").addEventListener("mouseleave", () => paintStars(ratingVal()));
+
+// 유료 교육과정 참여 의사: "yes" | "no" | "" (미선택)
+const paidVal = () => document.querySelector('input[name="paidInterest"]:checked')?.value || "";
+$("paidInterest").addEventListener("change", () => { $("paidErr").textContent = ""; });
 
 // 앱 목록 렌더
 $("apps").innerHTML = APPS.map(a => `
@@ -279,6 +292,7 @@ $("infoForm").addEventListener("submit", e => {
     data[f] = v;
   });
   if (!ratingVal()) { $("ratingErr").textContent = "'기사가 유용했나요?' 별점을 선택하세요."; ok = false; }
+  if (!paidVal()) { $("paidErr").textContent = "유료 교육과정 참여 의사를 선택하세요."; ok = false; }
   if (!$("agree").checked) { $("agreeErr").textContent = "개인정보 수집·이용에 동의해야 웹앱을 선택할 수 있습니다."; ok = false; }
   if (!ok) return;
   info = data;
@@ -312,7 +326,7 @@ $("appForm").addEventListener("submit", async e => {
   $("getBtn").disabled = true;
   $("getBtn").textContent = "처리 중…";
   try {
-    await record({ ...info, appId: app.id, rating: ratingVal(), agree: $("agree").checked });
+    await record({ ...info, appId: app.id, rating: ratingVal(), paidInterest: paidVal() === "yes", agree: $("agree").checked });
   } catch (err) {
     $("appErr").textContent = `기록 저장에 실패했습니다. 잠시 후 다시 시도하세요. (${err.message})`;
     loadSched(); // 관리자가 시작 시각을 바꿨을 수 있음

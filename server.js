@@ -77,6 +77,7 @@ async function addHistory(req, res) {
   if (FIELDS.some(f => !v[f])) return send(res, 400, { ok: false, error: "필수 항목 누락" });
   if (!PHONE_RE.test(v.phone)) return send(res, 400, { ok: false, error: "휴대폰 형식 오류" });
   if (!RATING_OK(rating)) return send(res, 400, { ok: false, error: "'기사가 유용했나요?' 별점(1~5)을 선택하세요." });
+  if (typeof d.paidInterest !== "boolean") return send(res, 400, { ok: false, error: "유료 교육과정 참여 의사(예/아니오)를 선택하세요." });
   if (!APPS.has(appId)) return send(res, 400, { ok: false, error: "알 수 없는 앱" });
   const startAt = await getStartAt();
   if (startAt && startAt > new Date()) {
@@ -90,13 +91,13 @@ async function addHistory(req, res) {
   // '링크 받기' 1회: 인적사항 저장(갱신) → 다운로드 1건 → 앱별 건수 +1 을 한 트랜잭션으로
   const saved = await tx(async client => {
     const { rows: [p] } = await client.query(
-      `INSERT INTO participants (name, univ, dept, major, role, phone, rating, agreed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+      `INSERT INTO participants (name, univ, dept, major, role, phone, rating, paid_interest, agreed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
        ON CONFLICT (phone) DO UPDATE
          SET name = EXCLUDED.name, univ = EXCLUDED.univ, dept = EXCLUDED.dept, major = EXCLUDED.major,
-             role = EXCLUDED.role, rating = EXCLUDED.rating, agreed_at = now(), updated_at = now()
+             role = EXCLUDED.role, rating = EXCLUDED.rating, paid_interest = EXCLUDED.paid_interest, agreed_at = now(), updated_at = now()
        RETURNING id`,
-      [v.name, v.univ, v.dept, v.major, v.role, v.phone, rating]);
+      [v.name, v.univ, v.dept, v.major, v.role, v.phone, rating, d.paidInterest]);
     const { rows: [dl] } = await client.query(
       `INSERT INTO downloads (participant_id, app_id, app_name) VALUES ($1, $2, $3) RETURNING id`,
       [p.id, appId, APPS.get(appId)]);
@@ -196,6 +197,7 @@ async function updateHistory(req, res, id) {
   const appId = Number(d.appId), rating = Number(d.rating);
   if (FIELDS.some(f => !v[f])) return send(res, 400, { ok: false, error: "필수 항목 누락" });
   if (!RATING_OK(rating)) return send(res, 400, { ok: false, error: "별점은 1~5 중 하나여야 합니다." });
+  if (typeof d.paidInterest !== "boolean") return send(res, 400, { ok: false, error: "유료 교육과정 참여 의사(예/아니오)를 선택하세요." });
   if (!PHONE_RE.test(v.phone)) return send(res, 400, { ok: false, error: "휴대폰 형식 오류" });
   if (!APPS.has(appId)) return send(res, 400, { ok: false, error: "알 수 없는 앱" });
 
@@ -205,9 +207,9 @@ async function updateHistory(req, res, id) {
         `SELECT participant_id, app_id FROM downloads WHERE id = $1 FOR UPDATE`, [id]);
       if (!dl) return false;
       await client.query(
-        `UPDATE participants SET name = $1, univ = $2, dept = $3, major = $4, role = $5, phone = $6, rating = $7, updated_at = now()
-          WHERE id = $8`,
-        [v.name, v.univ, v.dept, v.major, v.role, v.phone, rating, dl.participant_id]);
+        `UPDATE participants SET name = $1, univ = $2, dept = $3, major = $4, role = $5, phone = $6, rating = $7, paid_interest = $8, updated_at = now()
+          WHERE id = $9`,
+        [v.name, v.univ, v.dept, v.major, v.role, v.phone, rating, d.paidInterest, dl.participant_id]);
       if (dl.app_id !== appId) {
         await client.query(`UPDATE downloads SET app_id = $1, app_name = $2 WHERE id = $3`, [appId, APPS.get(appId), id]);
         await recount(client, [dl.app_id, appId]);
@@ -245,7 +247,7 @@ async function listHistory(req, res) {
     `SELECT d.id::int AS id, d.app_id AS "appId",
             count(*) OVER (PARTITION BY p.id)::int AS "personCount",
             to_char(d.created_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS') AS time,
-            p.name, p.univ, p.dept, p.major, p.role, p.phone, p.rating, d.app_id || '. ' || d.app_name AS app
+            p.name, p.univ, p.dept, p.major, p.role, p.phone, p.rating, p.paid_interest AS "paidInterest", d.app_id || '. ' || d.app_name AS app
        FROM downloads d JOIN participants p ON p.id = d.participant_id
       ORDER BY d.created_at DESC, d.id DESC`);
   const { rows: apps } = await pool.query(

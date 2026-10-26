@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS downloads (
 -- "기사가 유용했나요?" 별점 1~5 (참여자별 최근 응답)
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS rating SMALLINT CHECK (rating BETWEEN 1 AND 5);
 
+-- "교육 웹앱, 미디어 제작, 웹플랫폼 구축에 대한 유료 교육과정에 참여할 의사는?" 예(true)/아니오(false)
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS paid_interest BOOLEAN;
+
 -- 앱별 선택 시작 시각 (NULL = 앱별 제한 없음)
 ALTER TABLE apps ADD COLUMN IF NOT EXISTS start_at TIMESTAMPTZ;
 
