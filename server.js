@@ -77,11 +77,31 @@ async function addHistory(req, res) {
   if (!PHONE_RE.test(v.phone)) return send(res, 400, { ok: false, error: "휴대폰 형식 오류" });
   if (!APPS.has(appId)) return send(res, 400, { ok: false, error: "알 수 없는 앱" });
 
-  await pool.query(
-    `INSERT INTO download_history (name, univ, dept, major, role, phone, app_id, app_name, agreed_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())`,
-    [v.name, v.univ, v.dept, v.major, v.role, v.phone, appId, APPS.get(appId)]);
-  send(res, 201, { ok: true });
+  // '링크 받기' 1회: 인적사항 저장(갱신) → 다운로드 1건 → 앱별 건수 +1 을 한 트랜잭션으로
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: [p] } = await client.query(
+      `INSERT INTO participants (name, univ, dept, major, role, phone, agreed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, now())
+       ON CONFLICT (phone) DO UPDATE
+         SET name = EXCLUDED.name, univ = EXCLUDED.univ, dept = EXCLUDED.dept, major = EXCLUDED.major,
+             role = EXCLUDED.role, agreed_at = now(), updated_at = now()
+       RETURNING id`,
+      [v.name, v.univ, v.dept, v.major, v.role, v.phone]);
+    const { rows: [dl] } = await client.query(
+      `INSERT INTO downloads (participant_id, app_id, app_name) VALUES ($1, $2, $3) RETURNING id`,
+      [p.id, appId, APPS.get(appId)]);
+    const { rows: [app] } = await client.query(
+      `UPDATE apps SET download_count = download_count + 1 WHERE id = $1 RETURNING download_count`, [appId]);
+    await client.query("COMMIT");
+    send(res, 201, { ok: true, downloadId: Number(dl.id), appCount: app.download_count });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 async function listHistory(req, res) {
@@ -89,10 +109,14 @@ async function listHistory(req, res) {
     return send(res, 401, { ok: false, error: "관리자 키가 올바르지 않습니다." });
   }
   const { rows } = await pool.query(
-    `SELECT to_char(created_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS') AS time,
-            name, univ, dept, major, role, phone, app_id || '. ' || app_name AS app
-       FROM download_history ORDER BY created_at DESC`);
-  send(res, 200, { ok: true, rows });
+    `SELECT to_char(d.created_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS') AS time,
+            p.name, p.univ, p.dept, p.major, p.role, p.phone, d.app_id || '. ' || d.app_name AS app
+       FROM downloads d JOIN participants p ON p.id = d.participant_id
+      ORDER BY d.created_at DESC`);
+  const { rows: apps } = await pool.query(
+    `SELECT id, name, download_count AS count FROM apps ORDER BY id`);
+  const { rows: [{ count: participants }] } = await pool.query(`SELECT count(*)::int AS count FROM participants`);
+  send(res, 200, { ok: true, rows, apps, participants });
 }
 
 const server = http.createServer(async (req, res) => {
@@ -121,5 +145,14 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// 스키마 생성 → 앱 목록 동기화(config.js) → 이전 버전 데이터 이전 → 앱별 건수 재계산
 await pool.query(fs.readFileSync(path.join(ROOT, "db", "schema.sql"), "utf8"));
+for (const a of cfg.APPS) {
+  await pool.query(
+    `INSERT INTO apps (id, name, url) VALUES ($1, $2, $3)
+     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, url = EXCLUDED.url`, [a.id, a.name, a.url]);
+}
+await pool.query(fs.readFileSync(path.join(ROOT, "db", "migrate-legacy.sql"), "utf8"));
+await pool.query(
+  `UPDATE apps a SET download_count = (SELECT count(*) FROM downloads d WHERE d.app_id = a.id)`);
 server.listen(PORT, () => console.log(`http://localhost:${PORT}  (대시보드: /  · 사용자: /download.html)`));

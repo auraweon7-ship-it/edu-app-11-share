@@ -59,7 +59,7 @@
     <div class="dash">
       <div class="card span-7">
         <p class="chart-title">앱별 다운로드</p>
-        <p class="chart-sub">웹앱 1~10 · 건수</p>
+        <p class="chart-sub" id="cAppSub">웹앱 1~10 · 건수</p>
         <div id="cApp"></div>
       </div>
       <div class="card span-5">
@@ -124,7 +124,7 @@
         </div>
 
         <div class="row" style="margin-top:6px">
-          <button class="pill dark" id="qrDown">PNG 저장</button>
+          <button class="pill dark" id="qrDown" title="제목 + QR 카드형 이미지로 저장">PNG 저장</button>
           <button class="pill" id="qrPrint">인쇄</button>
         </div>
         <a class="pill" href="download.html" target="_blank" rel="noopener" style="margin-top:10px">웹앱 받기 페이지 열기</a>
@@ -162,7 +162,7 @@ const appLabel = a => `${a.id}. ${a.name}`;
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const p2 = n => String(n).padStart(2, "0");
 const ymd = d => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
-let rows = [];
+let rows = [], dbApps = [], dbParticipants = 0;
 
 // ---------- 초기화 ----------
 $("appVersion").textContent = APP_VERSION;
@@ -258,7 +258,7 @@ function render() {
 
   $("kpis").innerHTML = [
     ["전체 다운로드", total, "건"],
-    ["참여자", people, "명 · 휴대폰 기준"],
+    ["참여자", people, `명 · DB 등록 ${dbParticipants}명`],
     ["참여 대학", univs, "곳"],
     ["오늘 다운로드", todayN, today],
     ["1인당 평균", people ? (total / people).toFixed(1) : "0", "건"],
@@ -266,6 +266,11 @@ function render() {
   ].map(([lb, v, s]) => `<div class="kpi"><div class="lb">${lb}</div><div class="v disp">${esc(v)}</div><div class="s">${esc(s)}</div></div>`).join("");
 
   hbars($("cApp"), APPS.map(a => [appLabel(a), appCnt.get(appLabel(a)) || 0]), total);
+  // apps 테이블에 저장된 앱별 누적 건수 (필터와 무관)
+  const dbTotal = dbApps.reduce((s, a) => s + a.count, 0);
+  $("cAppSub").textContent = dbApps.length
+    ? `필터 결과 건수 · DB 누적 ${dbApps.map(a => `${a.id}번 ${a.count}`).join(" · ")} (합계 ${dbTotal}건)`
+    : "웹앱 1~10 · 건수";
   const roleCnt = countBy(list, "role");
   hbars($("cRole"), ROLES.map(r => [r, roleCnt.get(r) || 0]).filter(e => e[1] || ROLES.indexOf(e[0]) < 6), total);
   const topN = key => [...countBy(list, key)].sort((a, b) => b[1] - a[1]).slice(0, 10);
@@ -308,6 +313,8 @@ async function load() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
     rows = data.rows;
+    dbApps = data.apps || [];
+    dbParticipants = data.participants || 0;
     try { sessionStorage.setItem("edu_admin_key", key); } catch (e) {}
     rows.sort((a, b) => String(b.time).localeCompare(String(a.time)));
     $("updated").textContent = `업데이트 ${new Date().toLocaleTimeString("ko-KR")}`;
@@ -349,10 +356,13 @@ const drawQR = () => QRPoster.draw($("qrCanvas"), { ...qrOpts, url: $("qrUrl").v
   });
 });
 ["qrUrl", "qrLabel"].forEach(id => $(id).addEventListener("input", drawQR));
+// PNG는 카드형(제목·부제·QR 플레이트)으로 저장
 $("qrDown").addEventListener("click", () => {
+  const cv = document.createElement("canvas");
+  QRPoster.draw(cv, { ...qrOpts, layout: "card", url: $("qrUrl").value.trim(), label: $("qrLabel").value.trim() });
   const a = document.createElement("a");
-  a.href = $("qrCanvas").toDataURL("image/png");
-  a.download = `edu-apps-qr-${qrOpts.layout}.png`;
+  a.href = cv.toDataURL("image/png");
+  a.download = "edu-apps-qr.png";
   a.click();
 });
 $("qrPrint").addEventListener("click", () => {

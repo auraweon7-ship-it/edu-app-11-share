@@ -101,11 +101,51 @@ window.QRPoster = (() => {
     ctx.fillStyle = "#fff"; ctx.fillRect(x1, y + 1.5, x2 - x1, 1.5);
   }
 
-  function poster(ctx, mat, o) {
-    const W = 1200, H = 1600, M = 96;
+  // EDU APPS 제목 + 부제 + 안내 (y: 제목 기준선)
+  function titleBlock(ctx, W, M, y) {
+    ctx.textAlign = "left";
+    ctx.fillStyle = INK; ctx.font = `500 132px ${EN}`;
+    spaced(ctx, "EDU APPS", M - 4, y, 30);
+    ctx.font = `700 40px ${KR}`;
+    ctx.fillText(fitText(ctx, window.APP_TITLE || "", W - M * 2), M, y + 72);
+    ctx.fillStyle = MUTE; ctx.font = `500 30px ${KR}`;
+    ctx.fillText("QR을 촬영하고 웹앱 1개를 바로 받으세요", M, y + 122);
+  }
+
+  // 흰 QR 플레이트 + SCAN ME 태그 (py: 플레이트 윗변)
+  function plate(ctx, W, py, mat, o) {
+    const P = 720, px = (W - P) / 2, S = 600;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,.20)"; ctx.shadowBlur = 48; ctx.shadowOffsetY = 22;
+    ctx.fillStyle = "#fff"; rr(ctx, px, py, P, P, 52); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = "rgba(0,0,0,.05)"; ctx.lineWidth = 2; rr(ctx, px, py, P, P, 52); ctx.stroke();
+    drawCode(ctx, px + (P - S) / 2, py + (P - S) / 2, S, mat, o);
+
+    ctx.fillStyle = o.color; rr(ctx, W / 2 - 120, py - 30, 240, 60, 30); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = `700 24px ${EN}`; ctx.textBaseline = "middle";
+    spaced(ctx, "SCAN ME", W / 2, py + 1, 6, "center");
+    ctx.textBaseline = "alphabetic";
+  }
+
+  function background(ctx, W, H) {
     const bg = ctx.createLinearGradient(0, 0, 0, H);
     bg.addColorStop(0, "#f4f4f3"); bg.addColorStop(1, "#e7e7e6");
     ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // PNG 저장용 카드형: 제목·부제·안내 + QR 플레이트만
+  function card(ctx, mat, o) {
+    const W = 1200, H = 1200, M = 96;
+    background(ctx, W, H);
+    titleBlock(ctx, W, M, 190);
+    plate(ctx, W, 386, mat, o);
+    return [W, H];
+  }
+
+  function poster(ctx, mat, o) {
+    const W = 1200, H = 1600, M = 96;
+    background(ctx, W, H);
 
     // 상단 머리글
     ctx.fillStyle = INK; ctx.font = `700 28px ${KR}`; ctx.textAlign = "left";
@@ -115,28 +155,8 @@ window.QRPoster = (() => {
     ctx.textAlign = "left";
     engraved(ctx, M, W - M, 140);
 
-    // 타이틀
-    ctx.fillStyle = INK; ctx.font = `500 132px ${EN}`;
-    spaced(ctx, "EDU APPS", M - 4, 290, 30);
-    ctx.font = `700 40px ${KR}`;
-    ctx.fillText(fitText(ctx, window.APP_TITLE || "", W - M * 2), M, 362);
-    ctx.fillStyle = MUTE; ctx.font = `500 30px ${KR}`;
-    ctx.fillText("QR을 촬영하고 웹앱 1개를 바로 받으세요", M, 412);
-
-    // QR 플레이트
-    const P = 720, px = (W - P) / 2, py = 486, S = 600;
-    ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,.20)"; ctx.shadowBlur = 48; ctx.shadowOffsetY = 22;
-    ctx.fillStyle = "#fff"; rr(ctx, px, py, P, P, 52); ctx.fill();
-    ctx.restore();
-    ctx.strokeStyle = "rgba(0,0,0,.05)"; ctx.lineWidth = 2; rr(ctx, px, py, P, P, 52); ctx.stroke();
-    drawCode(ctx, px + (P - S) / 2, py + (P - S) / 2, S, mat, o);
-
-    // SCAN ME 태그 (플레이트 윗변에 걸침)
-    ctx.fillStyle = o.color; rr(ctx, W / 2 - 120, py - 30, 240, 60, 30); ctx.fill();
-    ctx.fillStyle = "#fff"; ctx.font = `700 24px ${EN}`; ctx.textBaseline = "middle";
-    spaced(ctx, "SCAN ME", W / 2, py + 1, 6, "center");
-    ctx.textBaseline = "alphabetic";
+    titleBlock(ctx, W, M, 290);
+    plate(ctx, W, 486, mat, o);
 
     // 3단계 안내
     const steps = [["01", "인적사항 입력"], ["02", "앱 1개 선택"], ["03", "링크 받기"]];
@@ -175,7 +195,8 @@ window.QRPoster = (() => {
   }
 
   function draw(canvas, o) {
-    const size = o.layout === "square" ? [1000, 1000] : [1200, 1600];
+    const LAYOUTS = { poster: [poster, 1200, 1600], card: [card, 1200, 1200], square: [square, 1000, 1000] };
+    const [render, ...size] = LAYOUTS[o.layout] || LAYOUTS.poster;
     canvas.width = size[0] * SCALE; canvas.height = size[1] * SCALE;
     const ctx = canvas.getContext("2d");
     ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
@@ -185,7 +206,7 @@ window.QRPoster = (() => {
       ctx.fillStyle = INK; ctx.font = `700 36px ${KR}`; ctx.fillText("주소가 너무 깁니다", 80, 120);
       return;
     }
-    (o.layout === "square" ? square : poster)(ctx, mat, o);
+    render(ctx, mat, o);
   }
 
   return { draw };
