@@ -201,6 +201,14 @@ th { background: var(--sunk); position: sticky; top: 0; font-size: .72rem; color
 .app .soon { margin-left: auto; flex: none; font-size: .7rem; font-weight: 600; color: rgb(160,100,20);
   background: rgba(226,154,59,.15); padding: 2px 9px; border-radius: 999px; font-variant-numeric: tabular-nums; }
 .app.closed { cursor: not-allowed; }
+.app.shake > span { animation: shake .4s; }
+@keyframes shake { 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
+/* 공개 전 안내 팝업 (화면 하단) */
+.pop { position: fixed; left: 50%; bottom: 24px; z-index: 50; width: max-content; max-width: calc(100vw - 32px);
+  transform: translate(-50%, 20px); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+  background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 999px; font-size: .86rem; font-weight: 600;
+  text-align: center; box-shadow: 0 14px 30px -12px rgba(0,0,0,.5); }
+.pop.show { opacity: 1; transform: translate(-50%, 0); }
 .app.closed > span { opacity: .6; }
 .apps.locked { opacity: .45; pointer-events: none; filter: grayscale(.3); }
 .notice { margin: 14px 0 0; padding: 10px 14px; border-radius: .9rem; font-size: .8rem; font-weight: 500;

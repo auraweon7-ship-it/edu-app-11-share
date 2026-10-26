@@ -128,6 +128,8 @@
   </div>
 </div>
 
+<div class="pop" id="pop" role="alert" aria-live="assertive"></div>
+
 <footer class="foot">
   <p class="disp">Copyright 2026 ⓒ Edu AI APP, All Rights Reserved.</p>
   <p>박정원 교수 (한국외국어대학교 중국학대학)</p>
@@ -229,6 +231,23 @@ function renderAppLocks() {
       (d ? `${d}일 ` : "") + `${p(Math.floor(s % 86400 / 3600))}:${p(Math.floor(s % 3600 / 60))}:${p(s % 60)}`;
   });
 }
+// 공개 전 앱을 누르면 선택되지 않고 안내 메시지
+const NOT_OPEN_MSG = "공개 시간이 아닙니다. 기사가 연재될 때 다운로드하세요!";
+let popT;
+function notOpen(label) {
+  $("appErr").textContent = NOT_OPEN_MSG;
+  $("pop").textContent = "⏱ " + NOT_OPEN_MSG;
+  $("pop").classList.add("show");
+  clearTimeout(popT);
+  popT = setTimeout(() => $("pop").classList.remove("show"), 2600);
+  if (label) { label.classList.remove("shake"); void label.offsetWidth; label.classList.add("shake"); }
+}
+$("apps").addEventListener("click", e => {
+  const label = e.target.closest(".app");
+  if (label && label.classList.contains("closed")) { e.preventDefault(); notOpen(label); }
+});
+$("apps").addEventListener("change", () => { $("appErr").textContent = ""; });
+
 function renderLock() {
   renderAppLocks();
   const locked = isLocked();
@@ -285,7 +304,7 @@ $("appForm").addEventListener("submit", async e => {
   if (isLocked()) { $("appErr").textContent = "아직 앱 선택 시작 전입니다."; return; }
   const sel = document.querySelector('input[name="app"]:checked');
   if (!sel) { $("appErr").textContent = "웹앱 1개를 선택하세요."; return; }
-  if (appLeft(Number(sel.value)) > 0) { $("appErr").textContent = "이 앱은 아직 공개 전입니다."; return; }
+  if (appLeft(Number(sel.value)) > 0) { notOpen(); return; }
   $("appErr").textContent = "";
   const app = APPS.find(a => a.id === Number(sel.value));
 

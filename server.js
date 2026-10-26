@@ -84,7 +84,7 @@ async function addHistory(req, res) {
   }
   const { rows: [appRow] } = await pool.query(`SELECT start_at FROM apps WHERE id = $1`, [appId]);
   if (appRow?.start_at && appRow.start_at > new Date()) {
-    return send(res, 403, { ok: false, error: "이 앱은 아직 공개 전입니다.", startAt: appRow.start_at.toISOString() });
+    return send(res, 403, { ok: false, error: "공개 시간이 아닙니다. 기사가 연재될 때 다운로드하세요!", startAt: appRow.start_at.toISOString() });
   }
 
   // '링크 받기' 1회: 인적사항 저장(갱신) → 다운로드 1건 → 앱별 건수 +1 을 한 트랜잭션으로
