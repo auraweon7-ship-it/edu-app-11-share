@@ -49,7 +49,11 @@
 
   <!-- 앱 선택 시작 시각 -->
   <div class="card">
-    <div class="sec-head">⏱ SCHEDULE <small>—— QR 촬영 후 앱 선택 시작 시각</small></div>
+    <button type="button" class="sec-head sec-toggle" id="schedToggle" aria-expanded="true" aria-controls="schedBody">
+      ⏱ SCHEDULE <small>—— QR 촬영 후 앱 선택 시작 시각</small>
+      <span class="r toggle-r"><span class="sec-sum" id="schedSum"></span><span class="toggle-txt" id="schedToggleTxt">숨기기</span><span class="chev" aria-hidden="true"></span></span>
+    </button>
+    <div id="schedBody">
     <div class="sched-status" id="schedStatus">불러오는 중…</div>
     <div class="toolbar" style="margin-top:12px">
       <input id="schedAt" type="datetime-local" step="60" aria-label="앱 선택 시작 시각">
@@ -62,7 +66,7 @@
     <div class="sub-head">앱별 공개 일정 <small>— 비워 두면 전체 시작 시각만 적용 · 둘 다 지나야 선택 가능</small></div>
     <div class="table-wrap sched-table">
       <table>
-        <thead><tr><th>앱</th><th>공개 시각</th><th>상태</th><th class="act">지우기</th></tr></thead>
+        <thead><tr><th>앱</th><th>공개 시각</th><th>상태</th><th class="act">저장 · 지우기</th></tr></thead>
         <tbody id="appSchedBody"></tbody>
       </table>
     </div>
@@ -73,10 +77,12 @@
       <select id="bulkGap" aria-label="간격">
         <option value="10">10분 간격</option><option value="30">30분 간격</option>
         <option value="60" selected>1시간 간격</option><option value="1440">하루 간격</option>
+        <option value="10080">일주일 간격</option>
       </select>
       <button class="pill dark sm" id="appSchedSave">앱별 일정 저장</button>
     </div>
     <div class="err-msg" id="appSchedMsg"></div>
+    </div>
   </div>
 
   <!-- KPI -->
@@ -421,25 +427,35 @@ function applySched(data) {
 }
 
 // ---------- 앱별 공개 일정 ----------
+// appSched = DB에 저장된 값. 입력칸이 저장값과 다르면 '변경됨 · 저장 필요'로 표시
 let appSched = {};
 $("appSchedBody").innerHTML = APPS.map(a => `
   <tr data-app="${a.id}">
     <td>${esc(appLabel(a))}</td>
     <td><input type="datetime-local" step="60" class="field app-at" aria-label="${esc(a.name)} 공개 시각"></td>
     <td class="app-st"></td>
-    <td class="act"><button class="mini" data-clear="${a.id}">지우기</button></td>
+    <td class="act"><button class="mini save" data-save="${a.id}">저장</button><button class="mini" data-clear="${a.id}">지우기</button></td>
   </tr>`).join("");
 const appInput = id => document.querySelector(`tr[data-app="${id}"] .app-at`);
-function applyAppSched(data) {
+const savedVal = id => appSched[id] ? toLocalInput(appSched[id]) : "";
+const isDirty = id => appInput(id).value !== savedVal(id);
+const dirtyIds = () => APPS.map(a => a.id).filter(isDirty);
+
+// onlyIds: 방금 저장한 앱만 입력칸을 저장값으로 맞춤 (다른 앱의 미저장 편집은 유지)
+function applyAppSched(data, onlyIds) {
   sched.offset = new Date(data.now) - Date.now();
   appSched = Object.fromEntries(data.apps.map(a => [a.id, a.startAt ? new Date(a.startAt) : null]));
-  APPS.forEach(a => { appInput(a.id).value = appSched[a.id] ? toLocalInput(appSched[a.id]) : ""; });
+  APPS.forEach(a => { if (!onlyIds || onlyIds.includes(a.id)) appInput(a.id).value = savedVal(a.id); });
   renderAppSched();
 }
 function renderAppSched() {
   const now = Date.now() + sched.offset;
   APPS.forEach(a => {
-    const td = document.querySelector(`tr[data-app="${a.id}"] .app-st`);
+    const row = document.querySelector(`tr[data-app="${a.id}"]`), td = row.querySelector(".app-st");
+    const dirty = isDirty(a.id);
+    row.classList.toggle("dirty", dirty);
+    row.querySelector("[data-save]").disabled = !dirty;
+    if (dirty) { td.innerHTML = `<span class="st dirty">변경됨 · 저장 필요</span>`; return; }
     const own = appSched[a.id], eff = [own, sched.startAt].filter(Boolean).sort((x, y) => y - x)[0];
     if (!eff) { td.innerHTML = `<span class="st on">제한 없음</span>`; return; }
     const left = eff - now;
@@ -447,25 +463,17 @@ function renderAppSched() {
       ? `<span class="st wait">공개 전</span> <span class="disp">${remainText(left)}</span>${!own || own < sched.startAt ? ' <small class="mute">(전체 시각)</small>' : ""}`
       : `<span class="st on">공개 중</span>`;
   });
+  const n = dirtyIds().length;
+  $("appSchedSave").textContent = n ? `변경된 ${n}개 앱 저장` : "앱별 일정 저장";
+  $("appSchedSave").disabled = !n;
 }
-$("appSchedBody").addEventListener("click", e => {
-  const id = e.target.closest("[data-clear]")?.dataset.clear;
-  if (id) appInput(id).value = "";
-});
-$("bulkFill").addEventListener("click", () => {
-  if (!$("bulkAt").value) { $("appSchedMsg").style.color = ""; $("appSchedMsg").textContent = "채울 공개 시각을 먼저 선택하세요."; return; }
-  APPS.forEach(a => { appInput(a.id).value = $("bulkAt").value; });
-});
-$("bulkStep").addEventListener("click", () => {
-  if (!$("bulkAt").value) { $("appSchedMsg").style.color = ""; $("appSchedMsg").textContent = "1번 앱의 공개 시각을 먼저 선택하세요."; return; }
-  const base = new Date($("bulkAt").value), gap = Number($("bulkGap").value);
-  APPS.forEach((a, i) => { appInput(a.id).value = toLocalInput(new Date(base.getTime() + i * gap * 60000)); });
-});
-$("appSchedSave").addEventListener("click", async () => {
+
+async function saveAppSched(ids) {
   const msg = $("appSchedMsg");
   msg.style.color = ""; msg.textContent = "";
+  if (!ids.length) { msg.textContent = "변경된 일정이 없습니다."; return; }
   if (!$("adminKey").value.trim()) { msg.textContent = "관리자 키를 먼저 입력하세요."; return; }
-  const apps = APPS.map(a => ({ id: a.id, startAt: appInput(a.id).value ? new Date(appInput(a.id).value).toISOString() : null }));
+  const apps = ids.map(id => ({ id, startAt: appInput(id).value ? new Date(appInput(id).value).toISOString() : null }));
   try {
     const res = await fetch(SETTINGS_URL + "/apps", {
       method: "PUT", headers: { "Content-Type": "application/json", "x-admin-key": $("adminKey").value.trim() },
@@ -473,13 +481,36 @@ $("appSchedSave").addEventListener("click", async () => {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    applyAppSched(data);
+    applyAppSched(data, ids);
+    const names = ids.length === 1 ? `${ids[0]}번 앱` : `${ids.length}개 앱`;
     msg.style.color = "rgb(var(--ok))";
-    msg.textContent = `앱별 공개 일정을 저장했습니다 (${apps.filter(a => a.startAt).length}개 앱 예약).`;
+    msg.textContent = `${names} 공개 일정을 저장했습니다 (${new Date().toLocaleTimeString("ko-KR")}).`;
   } catch (err) {
     msg.textContent = "저장 실패: " + err.message;
   }
+}
+
+$("appSchedBody").addEventListener("input", renderAppSched);
+$("appSchedBody").addEventListener("click", e => {
+  const clear = e.target.closest("[data-clear]")?.dataset.clear;
+  if (clear) { appInput(clear).value = ""; renderAppSched(); }
+  const save = e.target.closest("[data-save]")?.dataset.save;
+  if (save) saveAppSched([Number(save)]);
 });
+$("bulkFill").addEventListener("click", () => {
+  if (!$("bulkAt").value) { $("appSchedMsg").style.color = ""; $("appSchedMsg").textContent = "채울 공개 시각을 먼저 선택하세요."; return; }
+  APPS.forEach(a => { appInput(a.id).value = $("bulkAt").value; });
+  renderAppSched();
+});
+$("bulkStep").addEventListener("click", () => {
+  if (!$("bulkAt").value) { $("appSchedMsg").style.color = ""; $("appSchedMsg").textContent = "1번 앱의 공개 시각을 먼저 선택하세요."; return; }
+  const base = new Date($("bulkAt").value), gap = Number($("bulkGap").value);
+  APPS.forEach((a, i) => { appInput(a.id).value = toLocalInput(new Date(base.getTime() + i * gap * 60000)); });
+  renderAppSched();
+});
+$("appSchedSave").addEventListener("click", () => saveAppSched(dirtyIds()));
+// 저장하지 않은 일정이 있으면 페이지를 떠날 때 경고
+window.addEventListener("beforeunload", e => { if (dirtyIds().length) { e.preventDefault(); e.returnValue = ""; } });
 async function loadSched() {
   try {
     const res = await fetch(SETTINGS_URL);
@@ -510,7 +541,23 @@ $("schedSave").addEventListener("click", () => {
   saveSched(new Date($("schedAt").value).toISOString());
 });
 $("schedNow").addEventListener("click", () => saveSched(null));
-setInterval(() => { renderSched(); renderAppSched(); }, 1000);
+// 펼치기 · 숨기기 (상태는 이 브라우저에 기억)
+function setSchedOpen(open) {
+  $("schedToggle").setAttribute("aria-expanded", String(open));
+  $("schedBody").hidden = !open;
+  $("schedToggleTxt").textContent = open ? "숨기기" : "펼치기";
+  try { localStorage.setItem("edu_sched_open", open ? "1" : "0"); } catch (e) {}
+}
+$("schedToggle").addEventListener("click", () => setSchedOpen($("schedBody").hidden));
+try { if (localStorage.getItem("edu_sched_open") === "0") setSchedOpen(false); } catch (e) {}
+function renderSchedSum() {
+  const now = Date.now() + sched.offset;
+  const head = !sched.startAt ? "진행 중 · 전체 제한 없음"
+    : sched.startAt > now ? `시작 전 · ${remainText(sched.startAt - now)} 남음` : "진행 중";
+  const waiting = Object.values(appSched).filter(t => t && t > now).length;
+  $("schedSum").textContent = head + (waiting ? ` · 공개 전 앱 ${waiting}개` : "");
+}
+setInterval(() => { renderSched(); renderAppSched(); renderSchedSum(); }, 1000);
 loadSched();
 
 // ---------- 기록 수정 · 삭제 ----------
