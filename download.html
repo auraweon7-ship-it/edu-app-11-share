@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>교육 웹앱 받기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="config.js"></script>
+<script src="common.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <p class="kicker">교수신문 AI 교육 웹앱 시리즈</p>
+      <p class="word"><b class="disp">EDUAPPS</b><span class="chip-tag disp">10</span></p>
+      <p class="by">Presented by 교수자를 위한 바이브 코딩</p>
+    </div>
+    <div class="date disp" data-date></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="sec-head">📦 What is “웹앱 받기”?</div>
+  <p class="hero-title disp">VIBE<br><span>×</span><br>EDU APPS</p>
+  <p class="hero-sub"><b id="title"></b><br>인적사항을 입력하고 <b>웹앱 1개</b>를 고르면 바로 링크를 드립니다. 1회 1개씩 받을 수 있어요.</p>
+
+  <div class="steps">
+    <span id="s1" class="on">1. 인적사항</span>
+    <span id="s2">2. 앱 선택</span>
+    <span id="s3">3. 링크</span>
+  </div>
+
+  <!-- STEP 1 -->
+  <form id="infoForm" class="card" novalidate>
+    <div class="sec-head">🎓 PROFILE <small>—— 모두 필수 입력</small></div>
+    <div class="grid2">
+    <div><label for="name">성명 <span class="req">*</span></label>
+    <input id="name" autocomplete="name" maxlength="30">
+    <div class="err-msg" data-for="name"></div></div>
+
+    <div><label for="univ">대학 <span class="req">*</span></label>
+    <input id="univ" placeholder="예: 한국대학교" maxlength="50" autocomplete="organization">
+    <div class="err-msg" data-for="univ"></div></div>
+
+    <div><label for="dept">학과 <span class="req">*</span></label>
+    <input id="dept" placeholder="예: 교육학과" maxlength="50">
+    <div class="err-msg" data-for="dept"></div></div>
+
+    <div><label for="major">전공 <span class="req">*</span></label>
+    <input id="major" placeholder="예: 교육공학" maxlength="50">
+    <div class="err-msg" data-for="major"></div></div>
+    </div>
+
+    <label for="role">신분 <span class="req">*</span></label>
+    <select id="role">
+      <option value="">선택하세요</option>
+      <option>교수</option>
+      <option>강사</option>
+      <option>연구원</option>
+      <option>교직원</option>
+      <option>대학원생</option>
+      <option>학부생</option>
+      <option>기타</option>
+    </select>
+    <div class="err-msg" data-for="role"></div>
+
+    <label for="phone">휴대폰 <span class="req">*</span></label>
+    <input id="phone" type="tel" inputmode="numeric" placeholder="010-0000-0000" maxlength="13">
+    <div class="err-msg" data-for="phone"></div>
+
+    <button class="pill dark" type="submit">다음</button>
+  </form>
+
+  <!-- STEP 2 -->
+  <form id="appForm" class="card hidden">
+    <div class="sec-head">🧩 SELECT APP <small>—— 1회 1개만 선택</small></div>
+    <div class="apps" id="apps"></div>
+    <div class="err-msg" id="appErr"></div>
+    <div class="row">
+      <button class="pill" type="button" id="backBtn">이전</button>
+      <button class="pill dark" type="submit" id="getBtn">링크 받기</button>
+    </div>
+  </form>
+
+  <!-- STEP 3 -->
+  <div id="result" class="card result hidden">
+    <div class="sec-head">🔗 YOUR LINK <small>—— 링크가 준비되었습니다</small></div>
+    <div class="big" id="resName"></div>
+    <div class="linkbox disp" id="resUrl"></div>
+    <a class="pill dark" id="openBtn" target="_blank" rel="noopener">앱 열기</a>
+    <button class="pill" type="button" id="copyBtn">링크 복사</button>
+    <div class="toast" id="toast"></div>
+    <button class="pill" type="button" id="againBtn">다른 앱 받기</button>
+    <p class="note">다른 앱이 필요하면 ‘다른 앱 받기’로 1개씩 다시 선택하세요.</p>
+  </div>
+</div>
+
+<script>
+const FIELDS = ["name", "univ", "dept", "major", "role", "phone"];
+const $ = id => document.getElementById(id);
+let info = null;
+
+$("title").textContent = APP_TITLE;
+
+// 앱 목록 렌더
+$("apps").innerHTML = APPS.map(a => `
+  <label class="app">
+    <input type="radio" name="app" value="${a.id}">
+    <span><span class="bullet disp">${String(a.id).padStart(2, "0")}</span>${a.name}</span>
+  </label>`).join("");
+
+// 이 기기에서 이전 입력값 복원
+try {
+  const saved = JSON.parse(localStorage.getItem("edu_app_share_me") || "null");
+  if (saved) FIELDS.forEach(f => { if (saved[f]) $(f).value = saved[f]; });
+} catch (e) {}
+
+// 휴대폰 자동 하이픈
+$("phone").addEventListener("input", e => {
+  const d = e.target.value.replace(/\D/g, "").slice(0, 11);
+  e.target.value = d.length < 4 ? d
+    : d.length < 8 ? `${d.slice(0, 3)}-${d.slice(3)}`
+    : `${d.slice(0, 3)}-${d.slice(3, d.length - 4)}-${d.slice(-4)}`;
+});
+
+function step(n) {
+  $("infoForm").classList.toggle("hidden", n !== 1);
+  $("appForm").classList.toggle("hidden", n !== 2);
+  $("result").classList.toggle("hidden", n !== 3);
+  [1, 2, 3].forEach(i => $("s" + i).classList.toggle("on", i === n));
+  window.scrollTo(0, 0);
+}
+
+$("infoForm").addEventListener("submit", e => {
+  e.preventDefault();
+  let ok = true;
+  const data = {};
+  FIELDS.forEach(f => {
+    const v = $(f).value.trim();
+    let msg = v ? "" : "필수 입력 항목입니다.";
+    if (f === "phone" && v && !/^01[016789]-\d{3,4}-\d{4}$/.test(v)) msg = "휴대폰 번호 형식을 확인하세요.";
+    document.querySelector(`.err-msg[data-for="${f}"]`).textContent = msg;
+    if (msg) ok = false;
+    data[f] = v;
+  });
+  if (!ok) return;
+  info = data;
+  try { localStorage.setItem("edu_app_share_me", JSON.stringify(data)); } catch (e) {}
+  step(2);
+});
+
+$("backBtn").addEventListener("click", () => step(1));
+
+function nowStr() {
+  const d = new Date(), p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+async function record(row) {
+  if (!GAS_URL) {
+    try {
+      const list = JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]");
+      list.push(row);
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(list));
+    } catch (e) {}
+    return;
+  }
+  // Apps Script는 CORS 응답을 주지 않으므로 no-cors + text/plain 전송
+  await fetch(GAS_URL, {
+    method: "POST", mode: "no-cors",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(row)
+  });
+}
+
+$("appForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const sel = document.querySelector('input[name="app"]:checked');
+  if (!sel) { $("appErr").textContent = "웹앱 1개를 선택하세요."; return; }
+  $("appErr").textContent = "";
+  const app = APPS.find(a => a.id === Number(sel.value));
+
+  $("getBtn").disabled = true;
+  $("getBtn").textContent = "처리 중…";
+  try {
+    await record({ time: nowStr(), ...info, app: `${app.id}. ${app.name}` });
+  } catch (err) {
+    console.warn("기록 실패", err);
+  }
+  $("getBtn").disabled = false;
+  $("getBtn").textContent = "링크 받기";
+
+  $("resName").textContent = `${app.id}. ${app.name}`;
+  $("resUrl").textContent = app.url;
+  $("openBtn").href = app.url;
+  $("toast").textContent = "";
+  step(3);
+});
+
+$("copyBtn").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("resUrl").textContent);
+    $("toast").textContent = "링크를 복사했습니다.";
+  } catch (e) {
+    $("toast").textContent = "복사 실패 — 링크를 길게 눌러 복사하세요.";
+  }
+});
+
+$("againBtn").addEventListener("click", () => {
+  document.querySelectorAll('input[name="app"]').forEach(r => r.checked = false);
+  step(2);
+});
+</script>
+</body>
+</html>

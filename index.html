@@ -3,216 +3,349 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>교육 웹앱 받기</title>
+<title>다운로드 대시보드</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="config.js"></script>
 <script src="common.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 <header class="top">
   <div class="top-in">
     <div class="brand">
-      <p class="kicker">교수신문 AI 교육 웹앱 시리즈</p>
-      <p class="word"><b class="disp">EDUAPPS</b><span class="chip-tag disp">10</span></p>
-      <p class="by">Presented by 교수자를 위한 바이브 코딩</p>
+      <p class="kicker">교수신문 AI 교육 웹앱 시리즈 · 관리자</p>
+      <p class="word"><b class="disp">DASHBOARD</b><span class="chip-tag disp" id="srcTag"></span></p>
+      <p class="by">웹앱 10선 다운로드 현황 종합</p>
     </div>
     <div class="date disp" data-date></div>
   </div>
 </header>
 
-<div class="wrap">
-  <div class="sec-head">📦 What is “웹앱 받기”?</div>
-  <p class="hero-title disp">VIBE<br><span>×</span><br>EDU APPS</p>
-  <p class="hero-sub"><b id="title"></b><br>인적사항을 입력하고 <b>웹앱 1개</b>를 고르면 바로 링크를 드립니다. 1회 1개씩 받을 수 있어요.</p>
-
-  <div class="steps">
-    <span id="s1" class="on">1. 인적사항</span>
-    <span id="s2">2. 앱 선택</span>
-    <span id="s3">3. 링크</span>
+<div class="wrap wide">
+  <!-- 데이터 & 필터 -->
+  <div class="card">
+    <div class="sec-head">🔑 DATA <small>—— 불러오기 · 필터 · 내보내기</small><span class="r" id="updated"></span></div>
+    <div class="toolbar">
+      <input id="adminKey" type="password" placeholder="관리자 키 (Apps Script에 설정한 값)">
+      <button class="pill dark sm" id="loadBtn">불러오기</button>
+      <button class="pill sm" id="csvBtn">CSV 내보내기</button>
+      <button class="pill sm hidden" id="sampleBtn">샘플 데이터</button>
+      <button class="pill sm hidden" id="clearBtn">테스트 기록 비우기</button>
+    </div>
+    <div class="toolbar" style="margin-top:10px">
+      <select id="fPeriod">
+        <option value="all">전체 기간</option>
+        <option value="today">오늘</option>
+        <option value="7">최근 7일</option>
+        <option value="30">최근 30일</option>
+      </select>
+      <select id="fApp"><option value="">전체 앱</option></select>
+      <select id="fRole"><option value="">전체 신분</option></select>
+      <input id="q" placeholder="검색 (성명·대학·학과·휴대폰 등)">
+    </div>
+    <div class="err-msg" id="loadMsg"></div>
   </div>
 
-  <!-- STEP 1 -->
-  <form id="infoForm" class="card" novalidate>
-    <div class="sec-head">🎓 PROFILE <small>—— 모두 필수 입력</small></div>
-    <div class="grid2">
-    <div><label for="name">성명 <span class="req">*</span></label>
-    <input id="name" autocomplete="name" maxlength="30">
-    <div class="err-msg" data-for="name"></div></div>
+  <!-- KPI -->
+  <div class="section">
+    <div class="sec-head">📊 OVERVIEW <small>—— 필터 적용 결과</small></div>
+    <div class="kpis" id="kpis"></div>
+  </div>
 
-    <div><label for="univ">대학 <span class="req">*</span></label>
-    <input id="univ" placeholder="예: 한국대학교" maxlength="50" autocomplete="organization">
-    <div class="err-msg" data-for="univ"></div></div>
-
-    <div><label for="dept">학과 <span class="req">*</span></label>
-    <input id="dept" placeholder="예: 교육학과" maxlength="50">
-    <div class="err-msg" data-for="dept"></div></div>
-
-    <div><label for="major">전공 <span class="req">*</span></label>
-    <input id="major" placeholder="예: 교육공학" maxlength="50">
-    <div class="err-msg" data-for="major"></div></div>
+  <!-- 차트 -->
+  <div class="section">
+    <div class="sec-head">📈 ANALYTICS <small>—— 막대에 마우스를 올리면 상세 값</small></div>
+    <div class="dash">
+      <div class="card span-7">
+        <p class="chart-title">앱별 다운로드</p>
+        <p class="chart-sub">웹앱 1~10 · 건수</p>
+        <div id="cApp"></div>
+      </div>
+      <div class="card span-5">
+        <p class="chart-title">신분별 다운로드</p>
+        <p class="chart-sub">건수 · 비율</p>
+        <div id="cRole"></div>
+      </div>
+      <div class="card span-12">
+        <p class="chart-title">일자별 다운로드 추이</p>
+        <p class="chart-sub" id="cDaySub">일별 건수</p>
+        <div id="cDay" class="vchart"></div>
+      </div>
+      <div class="card span-6">
+        <p class="chart-title">시간대별 다운로드</p>
+        <p class="chart-sub">0~23시 · 건수</p>
+        <div id="cHour" class="vchart"></div>
+      </div>
+      <div class="card span-6">
+        <p class="chart-title">대학별 Top 10</p>
+        <p class="chart-sub">건수</p>
+        <div id="cUniv"></div>
+      </div>
+      <div class="card span-6">
+        <p class="chart-title">학과별 Top 10</p>
+        <p class="chart-sub">건수</p>
+        <div id="cDept"></div>
+      </div>
+      <div class="card span-6">
+        <p class="chart-title">배포용 QR코드</p>
+        <p class="chart-sub">사용자 페이지 주소</p>
+        <div class="toolbar">
+          <input id="qrUrl" placeholder="사용자 페이지 URL">
+          <button class="pill dark sm" id="qrBtn">QR 생성</button>
+          <button class="pill sm" id="qrDown">PNG 저장</button>
+          <a class="pill sm" href="download.html" target="_blank" rel="noopener">웹앱 받기 페이지 열기</a>
+        </div>
+        <div id="qr"></div>
+      </div>
     </div>
+  </div>
 
-    <label for="role">신분 <span class="req">*</span></label>
-    <select id="role">
-      <option value="">선택하세요</option>
-      <option>교수</option>
-      <option>강사</option>
-      <option>연구원</option>
-      <option>교직원</option>
-      <option>대학원생</option>
-      <option>학부생</option>
-      <option>기타</option>
-    </select>
-    <div class="err-msg" data-for="role"></div>
-
-    <label for="phone">휴대폰 <span class="req">*</span></label>
-    <input id="phone" type="tel" inputmode="numeric" placeholder="010-0000-0000" maxlength="13">
-    <div class="err-msg" data-for="phone"></div>
-
-    <button class="pill dark" type="submit">다음</button>
-  </form>
-
-  <!-- STEP 2 -->
-  <form id="appForm" class="card hidden">
-    <div class="sec-head">🧩 SELECT APP <small>—— 1회 1개만 선택</small></div>
-    <div class="apps" id="apps"></div>
-    <div class="err-msg" id="appErr"></div>
-    <div class="row">
-      <button class="pill" type="button" id="backBtn">이전</button>
-      <button class="pill dark" type="submit" id="getBtn">링크 받기</button>
+  <!-- 표 -->
+  <div class="section">
+    <div class="sec-head">🗂 HISTORY <small>—— 다운로드 기록</small><span class="r" id="rowCount"></span></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>#</th><th>일시</th><th>성명</th><th>대학</th><th>학과</th><th>전공</th>
+          <th>신분</th><th>휴대폰</th><th>다운로드 앱</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
     </div>
-  </form>
-
-  <!-- STEP 3 -->
-  <div id="result" class="card result hidden">
-    <div class="sec-head">🔗 YOUR LINK <small>—— 링크가 준비되었습니다</small></div>
-    <div class="big" id="resName"></div>
-    <div class="linkbox disp" id="resUrl"></div>
-    <a class="pill dark" id="openBtn" target="_blank" rel="noopener">앱 열기</a>
-    <button class="pill" type="button" id="copyBtn">링크 복사</button>
-    <div class="toast" id="toast"></div>
-    <button class="pill" type="button" id="againBtn">다른 앱 받기</button>
-    <p class="note">다른 앱이 필요하면 ‘다른 앱 받기’로 1개씩 다시 선택하세요.</p>
   </div>
 </div>
 
 <script>
-const FIELDS = ["name", "univ", "dept", "major", "role", "phone"];
 const $ = id => document.getElementById(id);
-let info = null;
+const COLS = ["time", "name", "univ", "dept", "major", "role", "phone", "app"];
+const HEAD = ["일시", "성명", "대학", "학과", "전공", "신분", "휴대폰", "다운로드 앱"];
+const ROLES = ["교수", "강사", "연구원", "교직원", "대학원생", "학부생", "기타"];
+const appLabel = a => `${a.id}. ${a.name}`;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const p2 = n => String(n).padStart(2, "0");
+const ymd = d => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+let rows = [];
 
-$("title").textContent = APP_TITLE;
+// ---------- 초기화 ----------
+$("srcTag").textContent = GAS_URL ? "SHEETS" : "TEST";
+if (!GAS_URL) {
+  $("adminKey").classList.add("hidden");
+  $("sampleBtn").classList.remove("hidden");
+  $("clearBtn").classList.remove("hidden");
+  $("loadMsg").textContent = "테스트 모드: 이 브라우저에 저장된 기록만 표시됩니다. 운영 시 config.js에 GAS_URL을 설정하세요.";
+  $("loadMsg").style.color = "var(--mute)";
+}
+APPS.forEach(a => $("fApp").insertAdjacentHTML("beforeend", `<option>${esc(appLabel(a))}</option>`));
+ROLES.forEach(r => $("fRole").insertAdjacentHTML("beforeend", `<option>${r}</option>`));
 
-// 앱 목록 렌더
-$("apps").innerHTML = APPS.map(a => `
-  <label class="app">
-    <input type="radio" name="app" value="${a.id}">
-    <span><span class="bullet disp">${String(a.id).padStart(2, "0")}</span>${a.name}</span>
-  </label>`).join("");
-
-// 이 기기에서 이전 입력값 복원
-try {
-  const saved = JSON.parse(localStorage.getItem("edu_app_share_me") || "null");
-  if (saved) FIELDS.forEach(f => { if (saved[f]) $(f).value = saved[f]; });
-} catch (e) {}
-
-// 휴대폰 자동 하이픈
-$("phone").addEventListener("input", e => {
-  const d = e.target.value.replace(/\D/g, "").slice(0, 11);
-  e.target.value = d.length < 4 ? d
-    : d.length < 8 ? `${d.slice(0, 3)}-${d.slice(3)}`
-    : `${d.slice(0, 3)}-${d.slice(3, d.length - 4)}-${d.slice(-4)}`;
-});
-
-function step(n) {
-  $("infoForm").classList.toggle("hidden", n !== 1);
-  $("appForm").classList.toggle("hidden", n !== 2);
-  $("result").classList.toggle("hidden", n !== 3);
-  [1, 2, 3].forEach(i => $("s" + i).classList.toggle("on", i === n));
-  window.scrollTo(0, 0);
+// ---------- 필터 ----------
+function filtered() {
+  const q = $("q").value.trim().toLowerCase(), app = $("fApp").value, role = $("fRole").value, per = $("fPeriod").value;
+  let from = "";
+  if (per === "today") from = ymd(new Date());
+  else if (per !== "all") { const d = new Date(); d.setDate(d.getDate() - Number(per) + 1); from = ymd(d); }
+  return rows.filter(r =>
+    (!from || String(r.time).slice(0, 10) >= from) &&
+    (!app || r.app === app) && (!role || r.role === role) &&
+    (!q || COLS.some(c => String(r[c] ?? "").toLowerCase().includes(q))));
 }
 
-$("infoForm").addEventListener("submit", e => {
-  e.preventDefault();
-  let ok = true;
-  const data = {};
-  FIELDS.forEach(f => {
-    const v = $(f).value.trim();
-    let msg = v ? "" : "필수 입력 항목입니다.";
-    if (f === "phone" && v && !/^01[016789]-\d{3,4}-\d{4}$/.test(v)) msg = "휴대폰 번호 형식을 확인하세요.";
-    document.querySelector(`.err-msg[data-for="${f}"]`).textContent = msg;
-    if (msg) ok = false;
-    data[f] = v;
+function countBy(list, key) {
+  const m = new Map();
+  list.forEach(r => { const k = typeof key === "function" ? key(r) : r[key]; m.set(k, (m.get(k) || 0) + 1); });
+  return m;
+}
+
+// ---------- 차트: 가로 막대 (값 직접 표기) ----------
+function hbars(el, entries, total) {
+  if (!total) { el.innerHTML = `<div class="empty">기록 없음</div>`; return; }
+  const max = Math.max(...entries.map(e => e[1]), 1);
+  el.innerHTML = `<div class="hbars">${entries.map(([k, v]) => {
+    const pct = total ? Math.round(v / total * 1000) / 10 : 0;
+    return `<div class="hbar" title="${esc(k)} · ${v}건 (${pct}%)">
+      <span class="nm">${esc(k)}</span>
+      <span class="track"><span class="fill" style="display:block;width:${v ? v / max * 100 : 0}%"></span></span>
+      <span class="n">${v}</span></div>`;
+  }).join("")}</div>`;
+}
+
+// ---------- 차트: 세로 막대 (SVG + 툴팁) ----------
+function vbars(el, data, { labelEvery = 1, tipLabel = d => d.label } = {}) {
+  const total = data.reduce((s, d) => s + d.v, 0);
+  if (!total) { el.innerHTML = `<div class="empty">기록 없음</div>`; return; }
+  // 실제 표시 폭으로 viewBox를 잡아 글자 크기가 축소되지 않게 함
+  const W = Math.max(280, el.clientWidth || 800), H = 220, L = 30, R = 6, T = 10, B = 26;
+  const iw = W - L - R, ih = H - T - B, n = data.length, step = iw / n;
+  const bw = Math.max(2, Math.min(28, step - 2));
+  const max = Math.max(...data.map(d => d.v));
+  const nice = max <= 4 ? max : Math.ceil(max / 4) * 4;
+  const ticks = [...new Set([0, .25, .5, .75, 1].map(t => Math.round(nice * t)))];
+  const y = v => T + ih - v / nice * ih;
+  const grid = ticks.map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/>`).join("");
+  const yl = ticks.map(t => `<text x="${L - 6}" y="${y(t) + 3}" text-anchor="end">${t}</text>`).join("");
+  const bars = data.map((d, i) => {
+    const x = L + i * step + (step - bw) / 2, h = d.v / nice * ih;
+    // 아래는 각지고 위만 4px 둥근 막대
+    const r = Math.min(4, bw / 2, h);
+    const path = h > 0 ? `M${x},${T + ih} V${T + ih - h + r} Q${x},${T + ih - h} ${x + r},${T + ih - h} H${x + bw - r} Q${x + bw},${T + ih - h} ${x + bw},${T + ih - h + r} V${T + ih} Z` : "";
+    return `<path class="bar" data-i="${i}" d="${path}"/>`;
+  }).join("");
+  const xl = data.map((d, i) => i % labelEvery ? "" :
+    `<text x="${L + i * step + step / 2}" y="${H - 8}" text-anchor="middle">${esc(d.tick ?? d.label)}</text>`).join("");
+  const hits = data.map((d, i) => `<rect class="hit" data-i="${i}" x="${L + i * step}" y="${T}" width="${step}" height="${ih}"/>`).join("");
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="세로 막대 차트">
+    <g class="grid">${grid}</g><g class="axis">${yl}${xl}</g><g>${bars}</g><g>${hits}</g></svg><div class="tip hidden"></div>`;
+
+  const svg = el.querySelector("svg"), tip = el.querySelector(".tip");
+  const barsEl = [...el.querySelectorAll(".bar")];
+  svg.addEventListener("mousemove", e => {
+    const i = e.target.dataset && e.target.dataset.i;
+    if (i === undefined) return;
+    const d = data[i], rect = svg.getBoundingClientRect(), sc = rect.width / W;
+    barsEl.forEach((b, j) => b.classList.toggle("dim", j != i));
+    tip.innerHTML = `${esc(tipLabel(d))} · <b>${d.v}건</b>`;
+    tip.style.left = `${(L + i * step + step / 2) * sc}px`;
+    tip.style.top = `${y(d.v) * sc}px`;
+    tip.classList.remove("hidden");
   });
-  if (!ok) return;
-  info = data;
-  try { localStorage.setItem("edu_app_share_me", JSON.stringify(data)); } catch (e) {}
-  step(2);
-});
-
-$("backBtn").addEventListener("click", () => step(1));
-
-function nowStr() {
-  const d = new Date(), p = n => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  svg.addEventListener("mouseleave", () => { tip.classList.add("hidden"); barsEl.forEach(b => b.classList.remove("dim")); });
 }
 
-async function record(row) {
-  if (!GAS_URL) {
-    try {
-      const list = JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]");
-      list.push(row);
-      localStorage.setItem(LOCAL_KEY, JSON.stringify(list));
-    } catch (e) {}
-    return;
-  }
-  // Apps Script는 CORS 응답을 주지 않으므로 no-cors + text/plain 전송
-  await fetch(GAS_URL, {
-    method: "POST", mode: "no-cors",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(row)
-  });
+// ---------- 렌더 ----------
+function render() {
+  const list = filtered(), total = list.length;
+  const today = ymd(new Date());
+  const people = new Set(list.map(r => r.phone)).size;
+  const univs = new Set(list.map(r => r.univ)).size;
+  const todayN = list.filter(r => String(r.time).startsWith(today)).length;
+  const appCnt = countBy(list, "app");
+  const top = [...appCnt].sort((a, b) => b[1] - a[1])[0];
+
+  $("kpis").innerHTML = [
+    ["전체 다운로드", total, "건"],
+    ["참여자", people, "명 · 휴대폰 기준"],
+    ["참여 대학", univs, "곳"],
+    ["오늘 다운로드", todayN, today],
+    ["1인당 평균", people ? (total / people).toFixed(1) : "0", "건"],
+    ["인기 앱", top ? top[0].split(".")[0] + "번" : "–", top ? `${top[0].replace(/^\d+\.\s*/, "")} · ${top[1]}건` : "기록 없음"]
+  ].map(([lb, v, s]) => `<div class="kpi"><div class="lb">${lb}</div><div class="v disp">${esc(v)}</div><div class="s">${esc(s)}</div></div>`).join("");
+
+  hbars($("cApp"), APPS.map(a => [appLabel(a), appCnt.get(appLabel(a)) || 0]), total);
+  const roleCnt = countBy(list, "role");
+  hbars($("cRole"), ROLES.map(r => [r, roleCnt.get(r) || 0]).filter(e => e[1] || ROLES.indexOf(e[0]) < 6), total);
+  const topN = key => [...countBy(list, key)].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  hbars($("cUniv"), topN("univ"), total);
+  hbars($("cDept"), topN("dept"), total);
+
+  // 일자별: 데이터 첫날(또는 기간 시작) ~ 오늘, 최대 60일
+  const dayCnt = countBy(list, r => String(r.time).slice(0, 10));
+  const per = $("fPeriod").value;
+  let start = new Date();
+  if (per === "all") {
+    const first = [...dayCnt.keys()].sort()[0];
+    if (first) start = new Date(first + "T00:00:00");
+  } else if (per !== "today") start.setDate(start.getDate() - Number(per) + 1);
+  const days = [];
+  for (let d = new Date(start); ymd(d) <= today; d.setDate(d.getDate() + 1)) days.push(ymd(d));
+  const shown = days.slice(-60);
+  $("cDaySub").textContent = `일별 건수 · ${shown[0] || today} ~ ${today}` + (days.length > 60 ? " (최근 60일)" : "");
+  vbars($("cDay"), shown.map(k => ({ label: k, tick: k.slice(5).replace("-", "/"), v: dayCnt.get(k) || 0 })),
+    { labelEvery: Math.ceil(shown.length / 12) });
+
+  const hourCnt = countBy(list, r => Number(String(r.time).slice(11, 13)));
+  vbars($("cHour"), Array.from({ length: 24 }, (_, h) => ({ label: `${h}시`, tick: String(h), v: hourCnt.get(h) || 0 })),
+    { labelEvery: 3, tipLabel: d => `${d.label}~${parseInt(d.label) + 1}시` });
+
+  $("rowCount").textContent = `${total}건`;
+  $("tbody").innerHTML = list.map((r, i) =>
+    `<tr><td>${total - i}</td>${COLS.map(c => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")
+    || `<tr><td colspan="9" style="text-align:center;color:var(--mute)">기록 없음</td></tr>`;
 }
 
-$("appForm").addEventListener("submit", async e => {
-  e.preventDefault();
-  const sel = document.querySelector('input[name="app"]:checked');
-  if (!sel) { $("appErr").textContent = "웹앱 1개를 선택하세요."; return; }
-  $("appErr").textContent = "";
-  const app = APPS.find(a => a.id === Number(sel.value));
-
-  $("getBtn").disabled = true;
-  $("getBtn").textContent = "처리 중…";
+// ---------- 데이터 ----------
+async function load() {
   try {
-    await record({ time: nowStr(), ...info, app: `${app.id}. ${app.name}` });
-  } catch (err) {
-    console.warn("기록 실패", err);
-  }
-  $("getBtn").disabled = false;
-  $("getBtn").textContent = "링크 받기";
-
-  $("resName").textContent = `${app.id}. ${app.name}`;
-  $("resUrl").textContent = app.url;
-  $("openBtn").href = app.url;
-  $("toast").textContent = "";
-  step(3);
-});
-
-$("copyBtn").addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText($("resUrl").textContent);
-    $("toast").textContent = "링크를 복사했습니다.";
+    if (!GAS_URL) {
+      rows = JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]");
+    } else {
+      const key = $("adminKey").value.trim();
+      if (!key) { $("loadMsg").textContent = "관리자 키를 입력하세요."; return; }
+      $("loadMsg").textContent = "";
+      $("loadBtn").disabled = true;
+      const res = await fetch(`${GAS_URL}?key=${encodeURIComponent(key)}`);
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "불러오기 실패");
+      rows = data.rows;
+    }
+    rows.sort((a, b) => String(b.time).localeCompare(String(a.time)));
+    $("updated").textContent = `업데이트 ${new Date().toLocaleTimeString("ko-KR")}`;
+    render();
   } catch (e) {
-    $("toast").textContent = "복사 실패 — 링크를 길게 눌러 복사하세요.";
+    $("loadMsg").textContent = "불러오기 실패: " + e.message;
+  } finally {
+    $("loadBtn").disabled = false;
   }
+}
+
+$("loadBtn").addEventListener("click", load);
+let resizeT;
+window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(render, 150); });
+["q", "fApp", "fRole", "fPeriod"].forEach(id => $(id).addEventListener(id === "q" ? "input" : "change", render));
+
+$("csvBtn").addEventListener("click", () => {
+  const list = filtered();
+  const cell = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = [HEAD.map(cell).join(","), ...list.map(r => COLS.map(c => cell(r[c])).join(","))].join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
+  a.download = `download-history-${ymd(new Date())}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 });
 
-$("againBtn").addEventListener("click", () => {
-  document.querySelectorAll('input[name="app"]').forEach(r => r.checked = false);
-  step(2);
+// 테스트 모드 전용: 대시보드 미리보기용 샘플
+$("sampleBtn").addEventListener("click", () => {
+  const names = ["김민준", "이서연", "박지호", "최수아", "정예준", "강하은", "조도윤", "윤지우", "장시우", "임서윤"];
+  const unis = ["한국대학교", "서울미래대학교", "동해대학교", "중앙교육대학교", "남부과학기술원", "새빛대학교"];
+  const depts = ["교육학과", "중국학과", "경영학과", "컴퓨터공학과", "국어국문학과", "간호학과", "미디어학과"];
+  const pick = a => a[Math.floor(Math.random() ** 1.6 * a.length)];
+  const list = [];
+  for (let i = 0; i < 160; i++) {
+    const d = new Date(); d.setDate(d.getDate() - Math.floor(Math.random() ** 1.5 * 21));
+    d.setHours(9 + Math.floor(Math.random() * 10), Math.floor(Math.random() * 60), Math.floor(Math.random() * 60));
+    const n = Math.floor(Math.random() * 40), app = APPS[Math.floor(Math.random() ** 1.3 * 10)];
+    list.push({ time: `${ymd(d)} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`,
+      name: names[n % 10], univ: pick(unis), dept: pick(depts), major: "-", role: pick(ROLES),
+      phone: `010-${1000 + n}-${2000 + n}`, app: appLabel(app) });
+  }
+  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); } catch (e) {}
+  load();
 });
+$("clearBtn").addEventListener("click", () => {
+  if (!confirm("이 브라우저의 테스트 기록을 모두 비울까요?")) return;
+  try { localStorage.removeItem(LOCAL_KEY); } catch (e) {}
+  load();
+});
+
+// ---------- QR ----------
+$("qrUrl").value = new URL("download.html", location.href).href;
+function makeQR() {
+  $("qr").innerHTML = "";
+  new QRCode($("qr"), { text: $("qrUrl").value.trim(), width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+}
+$("qrBtn").addEventListener("click", makeQR);
+$("qrDown").addEventListener("click", () => {
+  const img = $("qr").querySelector("img"), cv = $("qr").querySelector("canvas");
+  const a = document.createElement("a");
+  a.href = (img && img.src && img.src.startsWith("data:")) ? img.src : cv.toDataURL("image/png");
+  a.download = "edu-app-qr.png";
+  a.click();
+});
+makeQR();
+
+if (!GAS_URL) load(); else render();
 </script>
 </body>
 </html>
