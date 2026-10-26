@@ -167,6 +167,12 @@ input::placeholder { color: #a2a2a8; }
 table { width: 100%; border-collapse: collapse; font-size: .8rem; }
 th, td { padding: 9px 12px; border-bottom: 1px solid rgba(0,0,0,.06); text-align: left; white-space: nowrap; }
 th { background: var(--sunk); position: sticky; top: 0; font-size: .72rem; color: var(--mute); font-weight: 700; }
+/* 푸터: 헤더와 같은 돌출 슬랩, 위쪽 음각선 */
+.foot { margin-top: 24px; padding: 22px 16px 26px; text-align: center; background: var(--face);
+  border-top: 1px solid rgba(0,0,0,.06); box-shadow: inset 0 1px 0 #fff, 0 -8px 18px -12px rgba(0,0,0,.12); }
+.foot p { margin: 0; font-size: .74rem; color: var(--mute); line-height: 1.8; }
+.foot p:first-child { font-weight: 600; color: var(--ink); letter-spacing: .01em; }
+
 /* QR 포스터 스튜디오 */
 .qr-studio { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 360px); gap: 28px; align-items: start; }
 .qr-preview { display: grid; place-items: center; padding: 22px; border-radius: 1.2rem; background: var(--sunk); box-shadow: var(--press); }
